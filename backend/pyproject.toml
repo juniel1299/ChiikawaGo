@@ -1,0 +1,30 @@
+[project]
+name = "chii-world-api"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "Django==5.2.17",
+  "djangorestframework==3.18.1",
+  "djangorestframework-simplejwt==5.5.1",
+  "drf-spectacular==0.30.0",
+  "psycopg[binary]==3.3.6",
+]
+
+[dependency-groups]
+dev = ["pytest==9.1.1", "pytest-django==4.14.0", "ruff==0.16.10"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+pythonpath = ["."]
+testpaths = ["tests", "apps"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+"config/settings/*.py" = ["F403", "F405"]
+"**/migrations/*.py" = ["E501"]

@@ -1,0 +1,53 @@
+name: Checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Configure local environment
+        run: cp .env.example .env
+      - name: Build development images
+        run: docker compose build
+      - name: Start PostGIS
+        run: docker compose up -d --wait db
+      - name: Backend checks and fresh migrations
+        run: |
+          docker compose run --rm api ruff check .
+          docker compose run --rm api ruff format --check .
+          docker compose run --rm api python manage.py check
+          docker compose run --rm api python manage.py makemigrations --check --dry-run
+          docker compose run --rm api python manage.py migrate --noinput
+          docker compose run --rm api python manage.py spectacular --validate --fail-on-warn --file /tmp/schema.yaml
+          docker compose run --rm api pytest -q
+      - name: Frontend checks and production build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run lint
+          npm run typecheck
+          npm run test
+          npm run build
+      - name: Start full stack
+        run: docker compose up -d --wait
+      - name: Browser tests
+        working-directory: frontend
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --tail=100
+      - name: Stop services
+        if: always()
+        run: docker compose down
