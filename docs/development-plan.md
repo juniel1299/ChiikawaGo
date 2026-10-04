@@ -2,7 +2,7 @@
 
 ## 현재 범위
 
-승인된 Phase 0~4를 단계별로 구성했다. 첫 MVP는 Phase 6까지이므로 Encounter·Capture·Collection은 아직 없다. 코드의 의도는 각 도메인 문서에, 로컬 실행 명령은 README에 둔다. 실제 검증 결과와 남은 한계는 아래에 별도로 기록한다.
+승인된 Phase 0~6을 단계별로 구성했다. 첫 핵심 MVP는 API 통합 테스트와 Django Admin 기준으로 검증한다. 코드의 의도는 각 도메인 문서에, 로컬 실행 명령은 README에 둔다. 실제 검증 결과와 남은 한계는 아래에 별도로 기록한다.
 
 | 단계 | 구현 순서와 산출물 | 완료 기준 |
 |---|---|---|
@@ -55,8 +55,8 @@ Vitest/Testing Library는 폼 오류·이동, CSRF와 쿠키 속성을 검증한
 
 GitHub Actions는 동일 Compose DB, backend 정적 검사/migration/schema/pytest와 frontend lint/typecheck/unit/build/E2E를 실행한다. 워크플로 파일을 제공했으며 원격 실행 여부는 실제 Actions 결과에서 확인한다. 클라우드 배포는 Phase 14다.
 
-1. **Phase 5:** Spawn 조건·시간·확률 결정, Encounter 발급/만료 설계와 테스트.
-2. **Phase 6:** Capture 원자성·중복 결과 재사용, Collection 조회. 이 시점이 첫 핵심 MVP 완료.
+1. **Phase 5:** 정수 weight·단일 기간 Rule, Encounter 발급/자연 만료/재사용, 조회 전용 Admin 구현.
+2. **Phase 6:** Capture 원자성·중복 결과 재사용, Collection 조회 구현. API/Admin 기준 첫 핵심 MVP.
 3. **Phase 7:** Community와 권한·신고.
 4. **Phase 8:** Crawler의 수집/정규화/중복/검수 흐름을 수동 실행 가능한 유스케이스로 먼저 완성.
 5. **Phase 9:** Celery + RabbitMQ 연결. HTTP와 수집 작업을 분리.
@@ -108,3 +108,48 @@ GitHub Actions는 동일 Compose DB, backend 정적 검사/migration/schema/pyte
 이번에 수정하지 않은 SHOULD FIX: Logout의 403/401 차이와 BFF의 4xx 처리, BFF 자체 오류 envelope 통일, Admin 권한/프런트엔드 오류 상태 테스트 확대, production E2E 및 CI 실패 artifact 보관. 공개 운영 전 보안·운영 항목은 위 기존 목록을 유지한다.
 
 세 MUST FIX와 회귀 검증이 완료되어 Phase 5의 Spawn Rule/Encounter 구현에 착수할 수 있다. 이는 공개 운영 준비 완료를 의미하지 않으며 Phase 5의 게임 규칙·트랜잭션·동시성 검증은 해당 단계에서 추가한다.
+
+
+## Phase 5 구현과 운영 범위
+
+SpawnRule은 Admin에서 생성·수정·활성/비활성화한다. 생성 후 Spot/Variant 관계는 변경하지 않으며, 삭제·일괄 action은 없다. 동일 조합은 unique이므로 비활성 Rule이 이미 있으면 해당 Rule의 기간·weight·활성 상태를 수정한다. Encounter Admin은 superuser를 포함해 조회만 가능하며, 실효 상태 필터는 expires_at까지 반영한다.
+
+테스트는 실제 PostgreSQL/PostGIS를 사용한다. 최초 발급·만료 후 재발급·사용자 분리·Rule 변경 경합을 별도 연결과 pg_blocking_pids로 검증한다. 난수 구간은 반환값을 제어하며 시간 대기나 확률적 성공에 의존하지 않는다. GPS 거리 경계는 PostGIS 좌표 변환의 미세한 오차를 고려해 측정 경계의 양옆을 검증하고, 운영 반경에 보정값을 추가하지 않는다.
+
+이 단계는 API와 Django Admin으로 완료한다. 프런트엔드·지도·모바일·Capture·Collection은 추가하지 않으며 새 라이브러리·캐시·큐도 없다. 배포 시 기존 migration 이후 encounters의 첫 migration을 명시적으로 적용한다. 운영 데이터 자동 생성은 없다.
+
+## 2026-10-03 Phase 5 로컬 검증 기록
+
+- Backend 전체 110개 통과: 기존 35개 + Phase 5 신규 75개. 실제 PostgreSQL/PostGIS 테스트 DB에서 빈 DB migration부터 검증했다.
+- 신규 검사에는 Rule 기간/weight/DB 제약, 실제 JWT와 JSON 요청, 거리 경계, 카탈로그 필터, TTL 읽기/재사용/재발급, 소유권, Admin 읽기 전용 권한, OpenAPI 실제 응답 계약이 포함된다.
+- PostgreSQL 잠금 대기를 확인한 최초 발급/만료 후 재발급/다른 사용자 경합과 Rule 비활성화 선점 순서, 잠금 대기 중 Rule 만료 테스트가 통과했다. 다른 Spot은 한 Spot의 잠금과 독립적으로 발급 가능함을 확인했다.
+- 기존 Encounter 만료 상태 저장 후 실패 및 새 Encounter 저장 후 실패를 주입해 전체 롤백을 확인했다. Rule이 없어 재발급에 실패할 때도 기존 행을 부분 변경하지 않는다.
+- Ruff check/format, Django check, OpenAPI validate/fail-on-warn, migration drift 검사 통과.
+- 로컬 개발 DB에 encounters.0001_initial 적용 완료. migration은 신규 테이블과 제약만 생성한다.
+- 기존 Frontend Vitest 4개, 실제 개발 스택 Chromium 인증/CSRF E2E 2개, ESLint/TypeScript 통과. 별도 Node 22 컨테이너에서 Next.js production build 성공.
+- 코드 의존성·Compose·Frontend 기능 변경 없음. 타입 생성기의 next-env.d.ts 자동 변경은 복원했다. 원격 GitHub Actions는 실행하지 않았다.
+
+Phase 5의 API/Admin 구현과 회귀 검증이 완료됐다. 동일 Spot 요청 직렬화, 사용자 입력 GPS의 한계, 저장 status와 실효 만료 상태의 차이는 설계상 유지된다. Phase 6 Capture/Collection, 공개 운영 준비 및 이전 SHOULD FIX는 이번 단계에서 구현하지 않았다.
+
+
+## Phase 6 구현 범위와 검증
+
+Capture는 위치 재검증 없이 유효한 Encounter를 성공 처리한다. 결과 → Collection → captured 변경을 하나의 트랜잭션으로 처리하며, 동일 Encounter 재시도는 TTL 이후에도 같은 결과를 반환한다. Collection은 현재 카탈로그 이름/등급을 조회하고, 기본 20/최대 100 pagination과 획득 시각/id 내림차순을 제공한다. Encounter/CaptureResult/Collection은 superuser도 Admin에서 조회만 가능하다.
+
+기존 110개 검사 중 captured를 잘못된 status로 취급하던 Phase 5 케이스는 새 상태 정책에 맞춰 제거하고 Capture 상태 전이 테스트로 대체한다. 신규 검증은 실제 JWT/전체 MVP 흐름, 멱등성, 잠금 대기와 만료, 생성/Capture 경합, 저장 단계 전후 실패 주입, DB 유일 제약, 조회 권한/페이지/N+1, Admin, OpenAPI 계약, Phase 5 데이터 migration 보존을 포함한다.
+
+Capture Rate·아이템·쿨다운·Redis·비동기·모바일은 추가하지 않는다. 같은 Spot에서 Capture 직후 다시 Encounter를 발급받을 수 있다. 공개 운영 보안 항목과 기존 SHOULD FIX는 별도 작업으로 남긴다.
+
+## 2026-10-03 Phase 6 로컬 검증 기록
+
+- Backend 전체 154개 통과. Phase 5의 110개 중 captured 금지 케이스 1개를 새 정책에 맞춰 대체하고, Phase 6 테스트 45개를 추가했다.
+- 실제 PostgreSQL/PostGIS에서 동시 Capture의 동일 응답/단일 지급, 실패한 선행 요청의 재시도, 잠금 대기 중 만료, 생성/Capture 양방향 경합과 다른 Encounter의 독립 처리를 검증했다.
+- CaptureResult 저장 후, Collection 저장 전/후, Encounter 상태 저장 전/후 예외를 주입해 전체 rollback을 확인했다. 불일치 데이터에는 자동 복구나 추가 지급 없이 500을 반환한다.
+- 가입/로그인 → Nearby → Encounter → Capture → Collection 통합 흐름과 같은 Variant 반복 획득 검증 통과. 현재 카탈로그 반영·권한·pagination·동률 정렬 및 목록 count/page의 2개 쿼리로 N+1 방지 확인.
+- 실제 Capture 최초/재시도·Collection 응답의 OpenAPI 필드/타입/required 검증, 읽기 전용 Admin과 captured 필터 검증 통과.
+- 빈 DB migration 및 Phase 5 데이터를 둔 상태의 Phase 6 업그레이드 테스트 통과. 기존 Encounter 상태/시각 보존과 자동 지급 없음 확인. 로컬 개발 DB에도 encounters.0002 및 collection.0001 적용 완료.
+- Ruff check/format, Django check, migration drift, spectacular --validate --fail-on-warn 통과.
+- Frontend Vitest 4개, 실제 개발 스택 Chromium 인증/CSRF E2E 2개, ESLint/TypeScript 통과. 별도 Node 22 컨테이너 Next.js production build 성공.
+- 의존성·Compose·Frontend 기능 변경 없음. 타입 생성기의 next-env.d.ts 자동 변경은 복원했다. 원격 GitHub Actions·커밋·push는 실행하지 않았다.
+
+API 통합 테스트와 Django Admin 기준 첫 핵심 MVP가 완성됐다. 모바일/지도/포획 UI와 공개 운영 준비 완료를 뜻하지 않는다. 기존 SHOULD FIX, 운영 요청 제한과 탈퇴/익명화 정책은 후속 과제로 유지한다.

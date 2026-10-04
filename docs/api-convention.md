@@ -69,4 +69,54 @@ NaN/Infinity, 범위 밖 좌표·반경은 보정하지 않고 400이다. 활성
 
 `GET /api/v1/schema`에서 schema를 제공하고 CI에서 `manage.py spectacular --validate --fail-on-warn`으로 검증한다. 공통 오류 envelope도 schema에 포함한다.
 
-Phase 5~6의 계획 경로는 `POST /encounters`, `POST /encounters/{id}/capture`, `GET /collection`이다. 현재 구현하지 않았다. Capture 재요청은 저장된 최종 결과를 반환하며 클라이언트가 성공 여부·보상을 지정할 수 없게 한다.
+Phase 6은 아래 Capture·Collection 계약을 제공한다. Capture 재요청은 저장된 최종 결과를 반환하며 클라이언트가 성공 여부·보상을 지정할 수 없다.
+
+
+## Phase 5 — Encounter
+
+`POST /api/v1/encounters`는 JWT 인증이 필요하다. 요청은 `spot_id`(UUID), `latitude`(-90~90), `longitude`(-180~180)만 허용한다. NaN/Infinity·누락·정의되지 않은 필드는 400이다. 사용자·Variant·status·만료 시각은 클라이언트가 결정하지 않는다.
+
+응답은 `id`, `spot_id`, `character_variant_id`(UUID 문자열), `spawned_at`, `expires_at`(UTC ISO 8601), `status`(active/expired/captured)의 직접 객체다. 신규 생성은 201, 같은 User·Spot의 미만료 결과 재사용은 200이다. 재사용해도 Variant와 TTL은 바뀌지 않는다.
+
+| 실패 조건 | status / error.code | details.reason |
+|---|---|---|
+| 입력 오류 | 400 / validation_error | 필드별 오류 또는 non_field_errors |
+| 인증 실패 | 401 / authentication_failed | 기존 인증 규약 |
+| Spot 없음·비활성 | 404 / not_found | 기존 detail |
+| 상호작용 반경 밖 | 403 / permission_denied | out_of_range |
+| 신규 발급 가능한 Rule 없음 | 409 / conflict | no_spawn_rule |
+
+거리는 Spot의 geography와 ST_DWithin으로 계산하고 interaction_radius_m 경계를 포함한다. Nearby의 검색 반경은 사용하지 않는다. GPS 위조나 실제 방문을 증명하는 기능은 아니다.
+
+재요청도 인증·Spot 활성·위치를 검증한다. 이미 발급한 결과는 Rule 기간 종료·Rule/카탈로그 비활성화에도 TTL까지 유지한다. 신규 발급의 기간 검증 시각은 행 잠금 대기 이후이며, Rule 종료 시각에 맞춰 TTL을 줄이지 않는다.
+
+`GET /api/v1/encounters/{id}`는 본인 소유만 반환한다. 타인 소유와 미존재는 404다. 조회에는 좌표가 필요 없고, 미포획 Encounter가 만료돼도 200 및 status=expired를 반환한다. captured는 시간이 지나도 유지한다. GET은 DB를 수정하지 않는다. Encounter 목록·수정·삭제 API는 제공하지 않는다. Capture 동작은 아래 Phase 6 API에서 제공한다.
+
+POST 200/201/409 및 GET 200을 OpenAPI에 기록하고 실제 응답의 필드·타입·required를 테스트한다. request_id, no-store, 내부 오류 일반화와 민감정보 로그 차단 규약을 유지한다.
+
+
+## Phase 6 — Capture
+
+`POST /api/v1/encounters/{id}/capture`는 JWT 인증이 필요하다. 본문은 생략 또는 `{}`만 허용한다. 위치·성공 여부·보상·사용자·Variant 등 추가 필드나 잘못된 본문은 400이다. 좌표 재전송 없이 발급 시 검증과 TTL을 자격으로 사용한다.
+
+최초 성공과 재시도 모두 200이며 응답 필드는 `id`(CaptureResult), `encounter_id`, `collection_entry_id`, `character_variant_id`, `captured_spot_id`(모두 UUID 문자열), `captured_at`(UTC ISO 8601), `status`("captured")다. 동일 Encounter의 성공 재시도는 같은 body를 반환한다. 변경 가능한 이름/Rarity는 포함하지 않는다.
+
+- 인증/비활성 계정은 기존 401, 미존재/다른 사용자 소유/잘못된 UUID 경로는 404.
+- 최초 Capture의 expires_at <= 잠금 이후 판단 시각이거나 저장 status가 expired이면 409/conflict, details.reason=encounter_expired. 실패 시 새 데이터나 만료 상태 update는 없다.
+- captured 상태의 재시도는 원래 TTL 이후에도 저장 결과를 반환한다. 인증·소유권·요청 형식은 항상 검사한다.
+- Spot·Rule·카탈로그의 사후 비활성화는 발급 결과를 취소하지 않는다. 최초 Capture 시에도 재검증하지 않는다.
+- 저장 상태와 결과/획득 개체가 불일치하면 추가 지급 없이 일반화된 500을 반환하고 안전한 로그를 남긴다.
+
+## Phase 6 — Collection
+
+`GET /api/v1/collection`은 본인 획득 개체만 반환한다. 사용자 파라미터로 조회 대상을 변경할 수 없다. 기존 `{count,next,previous,results}` pagination(기본 20, 최대 100)을 사용하고, 획득 시각 내림차순·동률 id 내림차순으로 고정한다. 검색/사용자 정렬/통계/진행률은 없다. 새 획득이 페이지 사이에 추가되면 page-number의 위치가 바뀔 수 있다.
+
+항목 필드:
+
+- `id`, `encounter_id`: UUID 문자열.
+- `character`: id, code, name.
+- `character_variant`: id, code, name, rarity, asset_key.
+- `captured_at`: UTC ISO 8601.
+- `captured_spot`: id, code, name.
+
+이름·등급은 현재 카탈로그 값이다. 비활성 카탈로그·Spot도 획득 이력에 남는다. 동일 Variant 반복 획득은 별도 항목으로 반환하며 GPS 좌표는 포함하지 않는다. 관계를 select_related로 조회해 페이지 항목 수에 따라 쿼리가 늘지 않게 한다.

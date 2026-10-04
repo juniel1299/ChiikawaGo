@@ -20,7 +20,10 @@ def add_error_responses(result, generator, request, public):
         for method, operation in path.items():
             if method not in {"get", "post", "put", "patch", "delete"}:
                 continue
-            for status in ["400", "401", "403", "404", "405", "500"]:
+            statuses = ["400", "401", "403", "404", "405", "500"]
+            if operation.get("operationId") in {"encounters_create", "encounters_capture"}:
+                statuses.append("409")
+            for status in statuses:
                 operation["responses"].setdefault(
                     status,
                     {

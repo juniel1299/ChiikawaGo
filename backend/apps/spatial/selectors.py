@@ -12,3 +12,10 @@ def nearby_spots(*, latitude, longitude, radius_m):
         .annotate(distance=Distance("location", origin))
         .order_by("distance", "id")
     )
+
+
+def within_interaction_radius(*, spot, latitude, longitude):
+    origin = Point(longitude, latitude, srid=4326)
+    return Spot.objects.filter(
+        pk=spot.pk, location__dwithin=(origin, D(m=spot.interaction_radius_m))
+    ).exists()

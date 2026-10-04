@@ -20,6 +20,8 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.characters",
     "apps.spatial",
+    "apps.encounters",
+    "apps.collection",
 ]
 MIDDLEWARE = [
     "config.middleware.RequestLogMiddleware",
@@ -97,7 +99,7 @@ SIMPLE_JWT = {
 }
 SPECTACULAR_SETTINGS = {
     "TITLE": "CHII WORLD API",
-    "DESCRIPTION": "Phase 0–4: accounts, character catalog, nearby spots.",
+    "DESCRIPTION": "Phase 0–6: accounts, characters, spots, encounters, capture and collection.",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
@@ -118,3 +120,5 @@ LOGGING = {
         "django.request": {"handlers": ["console"], "level": "CRITICAL", "propagate": False},
     },
 }
+
+ENCOUNTER_TTL_SECONDS = 180

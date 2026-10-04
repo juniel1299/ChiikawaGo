@@ -37,7 +37,7 @@ Custom User는 첫 accounts migration에 들어간다. spatial 첫 migration은 
 
 샘플 데이터는 명시적인 `seed_demo` 명령으로 등록한다. startup이나 migration에 캐릭터·계정 데이터를 숨기지 않는다. 기본 관리자 비밀번호나 고정 계정은 생성하지 않는다.
 
-## Phase 5~6 관계 초안 — 미구현
+## Phase 5~6 구현 관계
 
 ```text
 User ──< Encounter >── Spot
@@ -45,6 +45,38 @@ User ──< Encounter >── Spot
 Encounter ── 0..1 CaptureResult ── 0..1 CollectionEntry >── User
 ```
 
-Encounter는 소유자·Spot·Variant·발급/만료 시각·상태를 갖는다. Encounter당 하나의 최종 결과, 성공 결과당 하나의 CollectionEntry를 DB 유일 제약으로 보장한다. 동일 Variant의 다회 획득은 허용한다. 진행률은 초기 집계 조회로 산출한다.
+Encounter는 소유자·Spot·Variant·발급/만료 시각·상태를 갖는다. Encounter당 하나의 최종 결과, 성공 결과당 하나의 CollectionEntry를 DB 유일 제약으로 보장한다. 동일 Variant의 다회 획득은 허용한다. 진행률은 아직 구현하지 않는다.
 
-Spawn Rule 상세, 확률, 이벤트 조건, 위치 증빙 저장 정책은 Phase 5에서 결정한다. Redis TTL이나 distributed lock 없이도 DB transaction과 행 잠금으로 일관성을 유지한다.
+CaptureResult·CollectionEntry는 Phase 6에 구현했다. 이벤트와 위치 증빙 저장 정책은 후속 요구사항이다. Redis TTL이나 distributed lock 없이 DB transaction과 행 잠금으로 일관성을 유지한다.
+
+
+## Phase 5 모델
+
+| 모델 | 필드 | 제약 |
+|---|---|---|
+| SpawnRule | UUID id, spot FK, character_variant FK, weight(default 1), is_active, nullable starts_at/ends_at, created_at/updated_at | weight > 0, 두 시각이 있으면 starts_at < ends_at, (spot, character_variant) unique |
+| Encounter | UUID id, user/spot/character_variant FK, spawned_at, expires_at, status | expires_at > spawned_at, status는 active/expired/captured, status=active에 한해 (user, spot) unique |
+
+FK는 모두 PROTECT다. 사용자 탈퇴·익명화는 별도 정책으로 정한다. migration은 두 모델의 테이블·제약 추가만 수행하고 운영 데이터를 삽입하지 않는다.
+
+Rule은 Spot·Variant 조합당 하나의 기간만 가진다. 반복 시간대·요일·날씨·이벤트 조건은 없다. 시작은 포함하고 종료는 제외한다. null은 해당 방향의 기간 제한이 없음을 뜻한다. Rule·Variant·부모 Character가 모두 활성일 때 신규 후보가 된다. 양의 정수 weight의 합을 100으로 제한하지 않으며, 정수 난수와 누적 구간으로 한 개를 선택한다. 별도의 미출현 확률은 없다.
+
+TTL은 서버 설정 ENCOUNTER_TTL_SECONDS=180이다. expires_at <= 현재 시각이면 실효 상태는 expired다. GET/Admin은 DB를 변경하지 않고 실효 상태를 표시한다. 같은 User·Spot의 새 발급 시에만 만료된 active 행을 expired로 갱신하고 새 행을 같은 트랜잭션에서 삽입한다. 오류 발생 시 둘 다 롤백한다. 따라서 DB의 active는 아직 정리되지 않은 만료 행을 포함할 수 있으며, 이용 가능 판단은 반드시 expires_at도 확인한다.
+
+현재 시각을 조건부 unique 제약에 넣지 않는다. Batch/Redis는 필요 없다. captured 상태와 결과·수집 관계는 아래 Phase 6 모델을 따른다. 발급된 Variant FK와 유효기간을 보존하며 Rule FK·확률 스냅샷·사용자 좌표는 저장하지 않는다.
+
+
+## Phase 6 모델
+
+| 모델 | 필드 | 제약/참조 |
+|---|---|---|
+| CaptureResult | UUID id, encounter OneToOne, captured_at | Encounter별 최대 한 결과, PROTECT |
+| CollectionEntry | UUID id, user FK, character_variant FK, capture_result OneToOne | 결과별 최대 한 획득 개체, 모든 FK PROTECT |
+
+CaptureResult는 성공한 최종 결과만 기록한다. 확률적 실패·만료 오류 기록은 만들지 않는다. Collection의 (user, character_variant)는 unique가 아니다. 생성 함수는 잠긴 Encounter의 사용자/Variant로만 획득 개체를 만든다. 일반 FK는 교차 테이블 사용자/Variant 값 일치까지 강제하지 않으며 서비스와 테스트로 보장한다.
+
+획득 시각은 CaptureResult.captured_at, Encounter는 CaptureResult.encounter, 획득 Spot은 그 Encounter.spot을 조회한다. 별도 시각/Spot/이름 스냅샷은 없다. 이름·Rarity·Spot 이름은 현재 값이므로 운영자가 변경하면 기존 Collection 표시에도 반영된다. 비활성화돼도 획득 이력을 숨기지 않는다.
+
+captured는 최종 상태다. effective_status는 active만 만료로 계산하므로 시간이 지나도 captured를 유지한다. 만료 Capture 거부 시 DB status를 갱신하지 않는다. active 조건부 unique 제약은 유지되므로 Capture 후 새 발급이 가능하다.
+
+encounters의 0002 migration은 기존 상태 제약에 captured를 추가하고 CaptureResult를 만든다. collection의 0001 migration은 CollectionEntry를 만든다. Phase 5의 이미 적용한 0001은 변경하지 않으며, 기존 Encounter 자동 포획·획득 데이터 생성은 없다. 빈 DB와 Phase 5 → Phase 6 업그레이드를 모두 검증한다.

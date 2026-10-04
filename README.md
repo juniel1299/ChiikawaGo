@@ -1,6 +1,6 @@
 # CHII WORLD / ChiikawaGo
 
-위치 기반 캐릭터 수집 서비스의 **Phase 0~4** 기반입니다. Django Modular Monolith, Next.js App Router, PostgreSQL/PostGIS를 사용합니다. 현재 기능은 이메일/JWT 인증, 캐릭터 카탈로그, Nearby API와 Django Admin입니다. Encounter·Capture·Collection은 Phase 5~6입니다.
+위치 기반 캐릭터 수집 서비스의 **Phase 0~6** 기반입니다. Django Modular Monolith, Next.js App Router, PostgreSQL/PostGIS를 사용합니다. 현재 기능은 이메일/JWT 인증, 캐릭터 카탈로그, Nearby API, Spawn Rule/Encounter, 멱등 Capture, 본인 Collection 목록과 Django Admin입니다. 첫 핵심 MVP를 API로 검증하며 모바일·지도·포획 화면은 후속 단계입니다.
 
 ## 설계 문서
 

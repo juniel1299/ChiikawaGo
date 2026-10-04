@@ -22,7 +22,9 @@ backend/
   apps/
     accounts/           # models/admin/serializers/views/urls/migrations
     characters/         # 모델과 공개 카탈로그
-    spatial/            # 모델, Admin 좌표 입력, Nearby selector
+    spatial/            # 모델, Admin 좌표 입력, Nearby/상호작용 거리 selector
+    encounters/         # Spawn Rule, 발급/Capture service, TTL/재사용, 결과 API/Admin
+    collection/         # 획득 개체, 본인 목록, 조회 전용 Admin
   tests/integration/
 frontend/
   Dockerfile / package.json / package-lock.json
@@ -58,7 +60,7 @@ ESLint 10과 `eslint-config-next`의 하위 React 플러그인 호환 충돌을 
 
 ## Django 책임 배분
 
-단순 CRUD는 generic view와 serializer로 처리한다. 복잡한 조회는 `spatial/selectors.py`, 여러 모델의 상태 변경은 필요 시 service로 뺀다. ORM 위의 범용 Repository는 없다. Custom User는 첫 migration부터 사용한다. Admin은 각 app의 `admin.py`로 등록한다.
+단순 CRUD는 generic view와 serializer로 처리한다. 복잡한 공간 조회는 `spatial/selectors.py`, Encounter 발급·만료 정리·Capture는 `encounters/services.py`에서 트랜잭션으로 처리한다. ORM 위의 범용 Repository는 없다. Custom User는 첫 migration부터 사용한다. Admin은 각 app의 `admin.py`로 등록한다.
 
 로그에는 서버 발급 request ID, HTTP method, 일치한 route 패턴, 상태, 실행 시간을 넣는다. query string·요청 본문·토큰·사용자 좌표를 넣지 않는다. 로컬도 `DEBUG=False`로 민감한 디버그 페이지를 막고, Admin 정적 파일만 개발 서버의 `--insecure`로 제공한다.
 
@@ -91,3 +93,6 @@ Kubernetes, Kafka, Unity/AR/3D, H3는 제외다. Prometheus/Grafana/OTel은 관�
 - [Next.js BFF: Server Component는 원본에서 직접 조회](https://nextjs.org/docs/app/guides/backend-for-frontend)
 - [Simple JWT blacklist](https://django-rest-framework-simplejwt.readthedocs.io/en/stable/blacklist_app.html)
 - [GeoDjango geography 모델](https://docs.djangoproject.com/en/5.2/ref/contrib/gis/model-api/)
+
+
+Phase 6 Capture는 Encounter만 잠그고 성공 기록·Collection 생성을 명시적인 서비스 호출로 같은 트랜잭션에 묶는다. collection 서비스는 Encounter에서 소유자와 Variant를 결정한다. Capture 시 위치 재검증은 하지 않는다. Redis·추가 인프라·범용 Repository 없이 OneToOne 제약과 행 잠금으로 중복 지급을 막는다. Collection의 단순 목록은 generic view queryset과 select_related로 처리한다.
