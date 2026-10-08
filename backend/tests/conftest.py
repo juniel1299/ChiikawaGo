@@ -45,3 +45,24 @@ def encounter(user, spawn_rule):
     return create_encounter(
         user=user, spot_id=spawn_rule.spot_id, latitude=37.5665, longitude=126.978
     )[0]
+
+
+@pytest.fixture
+def community_post(user):
+    from apps.community.models import Post
+
+    return Post.objects.create(author=user, category="free", title="산책 이야기", content="본문")
+
+
+@pytest.fixture
+def other_user(db):
+    return User.objects.create_user(
+        "community-other@example.com", "Password-42!", display_name="친구"
+    )
+
+
+@pytest.fixture
+def moderator(user):
+    user.is_staff = user.is_superuser = True
+    user.save()
+    return user

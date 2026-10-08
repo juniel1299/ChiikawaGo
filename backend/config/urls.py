@@ -14,6 +14,7 @@ urlpatterns = [
     path("api/v1/", include("apps.spatial.urls")),
     path("api/v1/", include("apps.encounters.urls")),
     path("api/v1/", include("apps.collection.urls")),
+    path("api/v1/", include("apps.community.urls")),
 ]
 handler404 = "config.api.not_found"
 handler500 = "config.api.server_error"

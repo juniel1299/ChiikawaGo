@@ -120,3 +120,32 @@ POST 200/201/409 및 GET 200을 OpenAPI에 기록하고 실제 응답의 필드�
 - `captured_spot`: id, code, name.
 
 이름·등급은 현재 카탈로그 값이다. 비활성 카탈로그·Spot도 획득 이력에 남는다. 동일 Variant 반복 획득은 별도 항목으로 반환하며 GPS 좌표는 포함하지 않는다. 관계를 select_related로 조회해 페이지 항목 수에 따라 쿼리가 늘지 않게 한다.
+
+## Phase 7 — Community
+
+공개 Post/Comment GET은 비로그인에도 허용한다. 변경은 기존 Bearer JWT가 필요하다. 공개 author는 `{id, display_name}`만 반환한다. 숨김/삭제 데이터는 공개 조회·수정에서 404, 공개 콘텐츠의 타인 수정/삭제는 403이다. 작성자의 숨김 콘텐츠 삭제와 반복 삭제는 204다.
+
+| 메서드·경로 (앞에 /api/v1) | 입력 | 성공 |
+|---|---|---|
+| GET /community/posts | category, page, page_size | 200 pagination |
+| POST /community/posts | category, title, content | 201 상세 |
+| GET /community/posts/{id} | — | 200 상세 |
+| PATCH /community/posts/{id} | category/title/content 부분 수정 | 200 상세 |
+| DELETE /community/posts/{id} | — | 204 |
+| GET /community/posts/{id}/comments | page, page_size | 200 pagination |
+| POST /community/posts/{id}/comments | content | 201 댓글 |
+| PATCH /community/comments/{id} | content | 200 댓글 |
+| DELETE /community/comments/{id} | — | 204 |
+| PUT /community/posts/{id}/like | 생략 또는 {} | 204, 반복 포함 |
+| DELETE /community/posts/{id}/like | 생략 또는 {} | 204, 반복 포함 |
+| POST /community/reports | target_type, target_id, reason, details(선택) | 201 최초 / 200 기존 접수 |
+
+JSON 입력만 지원하며, 작성·수정·Like·Report의 정의되지 않은 필드는 400이다. 제목 200자, 게시글 본문 10000자, 댓글 2000자, 신고 설명 1000자이며 공백만 있는 콘텐츠는 거부한다. category는 free/goods/collection/spot/guide/event/trade. 잘못된 category 필터는 400이다.
+
+Post 목록 필드는 id, author, category, title, created_at, updated_at, like_count, comment_count, is_liked이며 상세에 content를 추가한다. Comment는 id, post_id, author, content, created_at, updated_at. 목록은 기존 pagination(20/100), Post는 created_at/id 내림차순, Comment는 오름차순이다. comment_count는 공개 댓글만 포함한다. 비로그인의 is_liked는 false다. 검색·사용자 정렬은 제공하지 않는다.
+
+Like PUT은 공개 Post에만 허용하며 DELETE는 숨김/삭제 Post에도 본인 Like 제거를 허용한다. 혼합 PUT/DELETE 동시 요청은 DB 직렬화 순서대로 최종 상태가 결정된다.
+
+Report target_type은 post/comment, target_id는 UUID, reason은 spam/abuse/inappropriate/other다. 신규 신고는 공개 대상만 허용한다. 자기 신고는 400/validation_error와 details.reason=self_report다. 중복은 원래 신고를 반환하며 사유를 덮어쓰거나 재개하지 않는다. 이미 접수됐다면 대상 숨김/삭제 이후에도 중복 결과를 반환한다. 응답은 id, target_type, target_id, status, created_at이며 증거·자유 입력 설명은 반환하지 않는다.
+
+Admin moderation은 별도의 세션/CSRF 화면이다. hidden/deleted 차이와 신고 처리 정책은 domain.md를 따른다. 별도 공개 moderation API나 사용자 신고 조회 API는 없다.

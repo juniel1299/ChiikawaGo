@@ -9,7 +9,7 @@
 | spatial | Spot, 좌표, 공간 조회, 거리 계산 | Phase 4 |
 | encounters | Spawn Rule, 발급·만료·재사용, Capture 최종 결과 | Phase 5~6 |
 | collection | 사용자별 획득 개체와 본인 목록 | Phase 6; 진행률은 후속 |
-| community | 게시글·댓글·반응·신고 | 후속 |
+| community | 게시글·평면 댓글·좋아요·신고·moderation | Phase 7 API/Admin |
 | news | 수집 출처·후보·검수·발행 | 후속 |
 | batch | Job·Schedule·Execution, 실행 운영 | 후속 |
 | events / notifications | 이벤트 조건 / 알림 전달 | 후속 |
@@ -58,3 +58,15 @@ Capture는 Encounter만 NO KEY UPDATE로 잠근다. 이후 Spot이나 Rule을 �
 collection 서비스는 CaptureResult의 Encounter에서 사용자와 Variant를 결정한다. 클라이언트는 소유자·결과·보상을 지정할 수 없다. DB는 OneToOne 관계의 중복을 막고, 상태와 두 행의 일치는 트랜잭션으로 보장한다. 상태/결과/획득 개체 불일치를 발견하면 자동 복구나 지급 없이 일반화된 500과 안전한 예외 로그로 처리한다.
 
 위치는 발급 시에만 검증한다. 발급 후 Spot/Rule/카탈로그 비활성화도 TTL 내 Capture를 취소하지 않는다. Capture 성공 후 같은 Spot에서 새 Encounter와 동일 Variant 재획득을 허용하며, 쿨다운·Rate Limit은 이번 단계에 없다. 성공한 결과의 재요청은 원래 TTL 이후에도 동일 결과를 반환한다.
+
+## Phase 7 Community
+
+community는 Post·Comment·Like·Report와 공개 상태를 소유한다. 외부 참조는 User뿐이며 collection/spot/event 카테고리에 미래 도메인 FK를 추가하지 않는다. API와 Django Admin을 구현하고 웹 화면·이미지·검색·알림·조회수·대댓글은 후속이다.
+
+Category는 고정 TextChoices다. 운영 편집 요구가 없으므로 별도 테이블은 없다. Like는 PUT/DELETE와 user/post unique로 재시도에 안전하게 처리한다. Report는 두 nullable FK와 XOR 제약을 사용한다. GenericForeignKey의 DB 참조 무결성 한계와 대상별 모델의 처리 중복을 피한다.
+
+모든 기존 Post 관련 변경은 Post → Comment(필요 시) → Report/Like 순서로 잠근다. 잠금 후 공개 상태·소유권을 재검증하며 변경 전체를 atomic으로 묶는다. 같은 Post의 변경은 사용자와 무관하게 짧게 직렬화되고 다른 Post는 독립적이다. raw SQL/서비스 외부 쓰기의 논리적 공개 상태까지 FK가 보장하는 것은 아니다. 운영 변경도 같은 서비스를 사용한다.
+
+작성자는 본인 콘텐츠만 수정·삭제한다. 삭제 시 Post/자식 Comment 원문을 제거하고 Like를 삭제하되 관계 tombstone과 미처리 신고 증거는 유지한다. hidden은 복원 가능하고 deleted는 복원 불가다. 부모 숨김은 자식 상태를 바꾸지 않는다. 공개 조회는 비로그인에도 허용하고 이메일은 반환하지 않는다.
+
+운영자는 staff와 view 및 moderate_post/moderate_comment/review_report 권한을 갖춰야 한다. 원문 편집은 superuser도 Admin에서 불가능하다. 신고 수용은 대상 숨김과 증거 제거, 기각은 증거 제거만 수행한다. 처리 기록과 안전한 Admin audit는 같은 트랜잭션에 포함한다. 신고 증거·설명은 처리 완료까지 보관하므로 미처리 backlog를 운영자가 점검해야 한다. 만료 Batch는 없다.

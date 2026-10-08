@@ -80,3 +80,18 @@ CaptureResult는 성공한 최종 결과만 기록한다. 확률적 실패·만�
 captured는 최종 상태다. effective_status는 active만 만료로 계산하므로 시간이 지나도 captured를 유지한다. 만료 Capture 거부 시 DB status를 갱신하지 않는다. active 조건부 unique 제약은 유지되므로 Capture 후 새 발급이 가능하다.
 
 encounters의 0002 migration은 기존 상태 제약에 captured를 추가하고 CaptureResult를 만든다. collection의 0001 migration은 CollectionEntry를 만든다. Phase 5의 이미 적용한 0001은 변경하지 않으며, 기존 Encounter 자동 포획·획득 데이터 생성은 없다. 빈 DB와 Phase 5 → Phase 6 업그레이드를 모두 검증한다.
+
+## Phase 7 — Community
+
+| 모델 | 필드 | 제약·조회 인덱스 |
+|---|---|---|
+| Post | UUID, author(PROTECT), category, title(200), content(10000), status, deleted_at, created_at, updated_at | category/status check, 삭제 시각·본문 제거 check, 공개 최신순 및 category/최신순 부분 인덱스 |
+| Comment | UUID, post(PROTECT), author(PROTECT), content(2000), status, deleted_at, timestamps | status/삭제 check, 공개 post/created_at/id 부분 인덱스 |
+| Like | UUID, user(PROTECT), post(CASCADE), created_at | user/post unique |
+| Report | UUID, reporter(PROTECT), nullable post/comment(PROTECT), reason, details(1000), status, snapshot_title/content, created_at, reviewed_at/by(PROTECT) | 대상 XOR, reporter/post 및 reporter/comment 조건부 unique, reason/status/처리 메타데이터·증거 제거 check |
+
+Post.Category는 free/goods/collection/spot/guide/event/trade다. content는 일반 텍스트이며 첨부/Blob/Base64 이미지 저장 필드는 없다. 상태는 visible/hidden/deleted. 삭제는 원문과 Like를 제거하는 제한적 soft delete이며 작성자 FK와 대상 ID를 보존한다. 계정 탈퇴/익명화는 별도 요구사항이다. count 컬럼은 없고 목록에서 집계한다.
+
+Report.reason은 spam/abuse/inappropriate/other, status는 pending/resolved/dismissed다. 최초 신고 시 잠근 대상 원문을 snapshot으로 저장한다. 댓글 신고에는 댓글 본문만 복사한다. 대상 수정·삭제 후에도 pending 증거는 유지한다. 완료 시 snapshot과 자유 입력 details를 비우고 reviewer/time을 기록한다. 처리된 신고는 재개하지 않는다. 대상별 사용자 중복 신고는 기존 접수 결과를 반환한다.
+
+미처리 신고의 기한 기반 자동 제거, 대댓글, Category 관리, 첨부 Object Storage, Spot/Variant/Event 연결은 Future Consideration이며 이번 migration에 포함하지 않는다.

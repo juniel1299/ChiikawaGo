@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     "apps.spatial",
     "apps.encounters",
     "apps.collection",
+    "apps.community",
 ]
 MIDDLEWARE = [
     "config.middleware.RequestLogMiddleware",
@@ -99,7 +100,7 @@ SIMPLE_JWT = {
 }
 SPECTACULAR_SETTINGS = {
     "TITLE": "CHII WORLD API",
-    "DESCRIPTION": "Phase 0–6: accounts, characters, spots, encounters, capture and collection.",
+    "DESCRIPTION": "Phase 0–7: core collection MVP and community API.",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,

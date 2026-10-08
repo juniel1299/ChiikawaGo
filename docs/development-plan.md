@@ -153,3 +153,28 @@ Capture Rate·아이템·쿨다운·Redis·비동기·모바일은 추가하지 
 - 의존성·Compose·Frontend 기능 변경 없음. 타입 생성기의 next-env.d.ts 자동 변경은 복원했다. 원격 GitHub Actions·커밋·push는 실행하지 않았다.
 
 API 통합 테스트와 Django Admin 기준 첫 핵심 MVP가 완성됐다. 모바일/지도/포획 UI와 공개 운영 준비 완료를 뜻하지 않는다. 기존 SHOULD FIX, 운영 요청 제한과 탈퇴/익명화 정책은 후속 과제로 유지한다.
+
+## Phase 7 — Community 구현
+
+- community app 하나로 고정 Category, Post, 평면 Comment, 멱등 Like, Post/Comment Report 및 권한을 구현한다. API/Admin만 대상이다.
+- 제한적 삭제는 본문 제거·댓글 삭제 처리·Like 제거를 하나의 트랜잭션에 묶는다. pending 신고 스냅샷만 보존하고 처리 시 제거한다. 운영자는 사용자 원문을 편집하지 않는다.
+- Post 선행 잠금과 DB unique/check를 결합한다. 잠금 대기를 pg_blocking_pids로 확인하며 Like/Report 중복, 삭제/댓글 작성, 수정/신고, 삭제/신고 처리 경합 및 실패 롤백을 검증한다.
+- 목록은 select_related·독립 집계 Subquery·Exists로 N+1과 조인 count 중복을 방지한다. 실제 응답/OpenAPI, Admin 권한/CSRF, Phase 6 데이터 보존 migration도 검증한다.
+- 기존 Phase 5~6 변경은 체크포인트 9619a0c6에 분리했다. Phase 7 migration은 신규 community 테이블만 생성하고 기존 migration을 변경하지 않는다. 실행은 `docker compose exec api python manage.py migrate`로 명시한다.
+
+운영상 한계: 같은 Post 변경 직렬화, page-number 페이지 이동, 미처리 신고의 기한 없는 증거 보관, 계정 탈퇴/익명화 미구현. 대댓글·이미지·분류 관리·Spot 연결·검색·보관 기한 자동화는 후속 고려사항이다. Redis/큐/새 라이브러리/Frontend 기능/기존 SHOULD FIX는 이번 범위에 없다.
+
+## 2026-10-04 Phase 7 로컬 검증 기록
+
+- Backend 전체 **203개 통과**: 기존 154개 + Community 49개. 실제 PostgreSQL/PostGIS 테스트 DB를 사용했다.
+- pg_blocking_pids로 실제 잠금 대기를 확인한 중복 Like/취소/Report, 삭제와 댓글 작성, 수정과 신고 스냅샷, 삭제와 신고 처리의 양방향 경합이 통과했다. 다른 Post 변경은 독립적으로 진행했다.
+- 삭제 중 실패, 신고 생성 직후 실패와 후속 재시도, 증거 제거 저장 전/후 실패에서 부분 변경 없이 롤백됨을 확인했다.
+- UUID/enum/삭제/대상 XOR/unique/처리 증거 제약, 작성자 권한과 비활성 계정, 신고 원문·설명의 로그 비노출, 목록 집계·정렬·pagination·N+1 검증을 통과했다. 공개 Post 목록은 2개, Comment 목록은 3개 쿼리로 항목 수에 따라 증가하지 않는다.
+- 실제 API 응답과 OpenAPI의 필드/타입/required, 204 빈 응답 및 공통 오류 계약 검증을 통과했다. 관리자 읽기 전용, 권한 분리, 실제 CSRF를 사용하는 일반 운영자의 처리, 증거 제거와 삭제 복원 금지를 확인했다.
+- 빈 DB migration과 Phase 6 Capture/Collection 데이터를 보존하는 업그레이드 테스트 통과. 로컬 개발 DB에 community.0001_initial 적용 완료.
+- Ruff check/format, Django check, migration drift, spectacular --validate --fail-on-warn 통과.
+- Frontend Vitest 4개, ESLint/TypeScript, 별도 Node 22 컨테이너의 Next.js production build 통과. 개발 스택 대상 Chromium 인증/CSRF E2E 2개 통과(브라우저 테스트 runner는 호스트 Node 23.7.0, Web 서버는 Node 22).
+- 타입 생성으로 변경된 next-env.d.ts는 원래 내용으로 복원했다. 의존성·Compose·Frontend·기존 도메인 기능 변경 없음. 원격 GitHub Actions는 실행하지 않았다.
+- Phase 5~6 체크포인트 커밋만 생성했다. Phase 7 변경은 아직 commit/push하지 않았다.
+
+Phase 7 API/Admin MVP의 완료 조건을 충족한다. 공개 운영 준비나 Community 웹 UI 완료를 의미하지 않는다. 미처리 신고 증거 보관과 Post 단위 직렬화는 위 설계상 한계로 유지한다.
