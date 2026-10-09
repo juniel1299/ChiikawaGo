@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     "apps.encounters",
     "apps.collection",
     "apps.community",
+    "apps.news",
 ]
 MIDDLEWARE = [
     "config.middleware.RequestLogMiddleware",
@@ -100,10 +101,14 @@ SIMPLE_JWT = {
 }
 SPECTACULAR_SETTINGS = {
     "TITLE": "CHII WORLD API",
-    "DESCRIPTION": "Phase 0–7: core collection MVP and community API.",
+    "DESCRIPTION": "Phase 0–8: core MVP, community and reviewed news.",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
+    "ENUM_NAME_OVERRIDES": {
+        "CategoryEnum": "apps.community.models.Post.Category",
+        "NewsCategoryEnum": "apps.news.models.Category.choices",
+    },
     "POSTPROCESSING_HOOKS": [
         "drf_spectacular.hooks.postprocess_schema_enums",
         "config.schema.add_error_responses",

@@ -66,3 +66,35 @@ def moderator(user):
     user.is_staff = user.is_superuser = True
     user.save()
     return user
+
+
+@pytest.fixture
+def news_source():
+    from django.utils import timezone
+
+    from apps.news.models import Source
+
+    return Source.objects.create(
+        code="dreamnews-dretec",
+        name="DreamNews / Dretec",
+        is_active=True,
+        policy_checked_at=timezone.now(),
+    )
+
+
+@pytest.fixture
+def news_item():
+    from pathlib import Path
+
+    from apps.news.parser import parse_detail
+
+    FIXTURES = Path(__file__).parent / "fixtures/news"
+    URL = "https://www.dreamnews.jp/press/0000000001"
+    return parse_detail((FIXTURES / "detail.html").read_text(), URL)
+
+
+@pytest.fixture
+def news_candidate(news_source, news_item):
+    from apps.news import services
+
+    return services.store_item(source_id=news_source.pk, item=news_item)[0]

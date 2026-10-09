@@ -149,3 +149,8 @@ Like PUT은 공개 Post에만 허용하며 DELETE는 숨김/삭제 Post에도 �
 Report target_type은 post/comment, target_id는 UUID, reason은 spam/abuse/inappropriate/other다. 신규 신고는 공개 대상만 허용한다. 자기 신고는 400/validation_error와 details.reason=self_report다. 중복은 원래 신고를 반환하며 사유를 덮어쓰거나 재개하지 않는다. 이미 접수됐다면 대상 숨김/삭제 이후에도 중복 결과를 반환한다. 응답은 id, target_type, target_id, status, created_at이며 증거·자유 입력 설명은 반환하지 않는다.
 
 Admin moderation은 별도의 세션/CSRF 화면이다. hidden/deleted 차이와 신고 처리 정책은 domain.md를 따른다. 별도 공개 moderation API나 사용자 신고 조회 API는 없다.
+
+
+## Phase 8 — 공개 News
+
+GET /api/v1/news, GET /api/v1/news/{id}: 인증 없이 발행된 News만 조회한다. 필드는 id/title/category/summary/source({code,name})/source_url/published_at/created_at이다. published_at은 원문 발표 UTC, created_at은 승인·서비스 발행 시각이다. 첫 Source의 summary는 빈 문자열이다. category는 news/goods/event/collaboration이고 잘못된 필터는 400이다. 기본 20/최대 100 pagination, published_at DESC/id DESC를 사용한다. Source 비활성화는 이미 발행된 News를 숨기지 않는다. 쓰기 API, source 필터, 검색, 사용자 정렬은 없다. 검수는 Admin의 CSRF 보호 POST와 별도 review_newscandidate 권한으로만 수행한다.

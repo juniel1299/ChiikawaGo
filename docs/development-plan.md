@@ -178,3 +178,36 @@ API 통합 테스트와 Django Admin 기준 첫 핵심 MVP가 완성됐다. 모�
 - Phase 5~6 체크포인트 커밋만 생성했다. Phase 7 변경은 아직 commit/push하지 않았다.
 
 Phase 7 API/Admin MVP의 완료 조건을 충족한다. 공개 운영 준비나 Community 웹 UI 완료를 의미하지 않는다. 미처리 신고 증거 보관과 Post 단위 직렬화는 위 설계상 한계로 유지한다.
+
+
+## Phase 8 — 구현 및 운영 규약
+
+Phase 7 체크포인트 2aca73c8을 feat/spawn-encounter에 push한 뒤 feat/crawler-news에서 구현한다. Source를 Admin에서 dreamnews-dretec / dreamnews_dretec으로 등록하고 정책 확인 시각과 메모를 입력한 뒤 활성화한다. `docker compose exec api python manage.py collect_news --source dreamnews-dretec`로 수동 실행한다. 하루 한 번 실행을 운영 기본으로 하며 자동 스케줄은 없다.
+
+robots 확인 → 목록 첫 페이지 → 치이카와 상품 상세 최대 5개 → 정규화 → 중복 확인 → Candidate → Admin 승인/반려 → 공개 News 순서다. HTTP 사이 최소 10초, timeout 10초, 응답 상한 2MiB, 명시적 User-Agent와 호스트/경로 제한을 적용한다. 403/429/challenge를 우회하거나 자동 재시도하지 않는다. 항목별 실패는 롤백하고 다른 성공은 보존하며, 실패가 있으면 명령은 비정상 종료한다.
+
+자동 테스트는 최소 HTML/JSON-LD fixture와 고정 응답만 사용한다. 실제 사이트에 CI가 의존하지 않는다. DB 제약·동시 잠금·rollback·발행 불변성·Admin·API 계약·N+1·Phase 7 migration 보존을 실제 PostGIS에서 검증한다. 실제 사이트 확인은 별도 제한된 수동 실행이며 자동 승인하지 않는다. 상업화, 본문/이미지, revision·재검수·비동기·Batch는 후속이다.
+
+
+### Phase 8 로컬 실행 안내
+
+1. `docker compose exec api python manage.py migrate`로 news.0001_initial을 적용한다.
+2. Admin의 Source에서 code=`dreamnews-dretec`, adapter=`dreamnews_dretec`, 이름, 정책 확인 시각·메모를 등록하고 활성화한다. 고정된 목록/정책 URL은 변경하지 않는다. 기본 비활성이며 migration은 Source를 자동 생성하지 않는다.
+3. `docker compose exec api python manage.py collect_news --source dreamnews-dretec`를 명시적으로 실행한다. 출력은 created/skipped/failed이고 실패가 있으면 비정상 종료한다. 네트워크·정책 오류의 경우 우회하지 말고 Source와 사이트 상태를 확인한다.
+4. NewsCandidate Admin에서 출처를 확인하고 별도 검수 권한으로 승인/반려한다. 승인은 즉시 발행한다. GET /api/v1/news에서 확인한다.
+
+동일 adapter의 Source를 하나로 제한해 요청 간격을 공유한다. 운영자 Source 수정은 진행 중인 요청 예약 시각을 보존한다. 지원하지 못하는 robots 규칙(와일드카드 경로·Allow 우선순위·10초 초과 crawl-delay 포함)이 나타나면 추측해서 진행하지 않고 중단한다. HTTP timeout은 소켓 연결/읽기 기준 10초이며 실행 전체 제한 시간이 아니다. 검수 전 공개 API에는 나타나지 않는다.
+
+## 2026-10-09 Phase 8 로컬 검증 기록
+
+- Phase 7 체크포인트 **2aca73c8** (`feat: complete community api and moderation`)을 기존 origin의 feat/spawn-encounter에 push했다. 현재 feat/crawler-news는 이 체크포인트를 기반으로 한다. Phase 8 변경은 아직 commit/push하지 않았다.
+- 실제 PostgreSQL/PostGIS에서 Backend 전체 **276개 통과**: 기존 203개 + News 신규 73개. 동시 수집·승인/반려·실패 후 재시도·요청 예약과 Source 비활성화 경합에서 pg_blocking_pids로 실제 대기를 확인했다.
+- RawItem/Candidate 저장 및 News/검수 상태/audit 저장 실패 주입의 rollback, published/pending/rejected 모두 재수집 불변, DB unique/check, Phase 7 콘텐츠·Capture/Collection 보존 migration을 검증했다.
+- 고정 HTTP 응답 → 실제 fetch/rate gate → parser → 정규화 → Candidate → 검수 → 공개 API 통합 검증을 통과했다. CI 테스트는 실제 사이트에 요청하지 않는다. 기본 parser fixture는 실제 구조를 반영한 합성 텍스트이며 원문 본문을 복제하지 않는다.
+- 공개 News 실제 응답/OpenAPI 필드·타입·required, category/pagination/동률 정렬, 목록 2개·상세 1개 쿼리, Admin 권한/CSRF/읽기 전용/출처 정책 강제 검증 통과.
+- Ruff check/format, Django check, migration drift 및 spectacular --validate --fail-on-warn 통과. Community의 기존 CategoryEnum 이름을 유지하면서 NewsCategoryEnum을 분리해 schema 경고를 해소했다.
+- Frontend ESLint/TypeScript, Vitest **4개**, 기존 실제 개발 스택의 Chromium 인증/CSRF E2E **2개** 통과. E2E runner는 호스트 Node 23.7.0이고 Web 서버는 Node 22다. 별도 Node 22 컨테이너에서 Next.js production build 성공. 최초 격리 빌드의 외부 node_modules 심볼릭 링크를 실제 복사로 바꾸어 검증했으며 제품 코드는 수정하지 않았다.
+- 개발 DB에 news.0001_initial을 적용했다. DreamNews 정책을 직접 HTTP로 재확인한 뒤 로컬 Source를 명시적으로 등록하고 collect_news를 한 번 실행했다: **created=1 skipped=0 failed=0**. RawItem 1건·pending Candidate 1건·News 0건을 확인했으며 자동 승인/발행하지 않았다.
+- 전체 HTML·기사 본문·이미지·신규 라이브러리·Frontend 기능·Compose·기존 도메인 변경 없음. next-env.d.ts의 타입 생성 변경은 복원했다. 원격 GitHub Actions 결과는 확인하지 않았으며 위 결과는 로컬 검증이다.
+
+Phase 8의 수동 수집/API/Admin 완료 조건을 충족한다. 이는 상업적 사용 권한이나 공개 운영 준비 완료를 뜻하지 않는다. Published News 자동 갱신, 변경본 Candidate, revision·재검수, 큐/스케줄러는 구현하지 않았다. 다음 실제 수집은 운영 기본인 하루 한 번 간격을 따른다.

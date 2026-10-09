@@ -95,3 +95,12 @@ Post.Category는 free/goods/collection/spot/guide/event/trade다. content는 일
 Report.reason은 spam/abuse/inappropriate/other, status는 pending/resolved/dismissed다. 최초 신고 시 잠근 대상 원문을 snapshot으로 저장한다. 댓글 신고에는 댓글 본문만 복사한다. 대상 수정·삭제 후에도 pending 증거는 유지한다. 완료 시 snapshot과 자유 입력 details를 비우고 reviewer/time을 기록한다. 처리된 신고는 재개하지 않는다. 대상별 사용자 중복 신고는 기존 접수 결과를 반환한다.
 
 미처리 신고의 기한 기반 자동 제거, 대댓글, Category 관리, 첨부 Object Storage, Spot/Variant/Event 연결은 Future Consideration이며 이번 migration에 포함하지 않는다.
+
+
+## Phase 8 — News
+
+Source는 UUID/code/name/source_type/adapter_key/base_url/is_active/policy_url/policy_checked_at/policy_notes/next_request_at/timestamps를 가진다. adapter는 unique로 동일 출처를 중복 등록하지 못하게 하며 URL은 DreamNews 드리텍으로 제한하고 Source는 명시적으로 Admin에서 등록한다. 자동 운영 데이터 migration은 없다. next_request_at은 동시 수동 요청 사이 간격을 공유하는 시각이며 스케줄이 아니다.
+
+RawItem은 Source, external_id(앞자리 0 보존), canonical_url, title, published_at, collected_at, metadata_hash를 저장한다. 전체 HTML/본문/이미지를 보관하지 않는다. Source+external_id 및 Source+canonical_url은 각각 unique이며 제목/hash는 unique가 아니다.
+
+NewsCandidate는 RawItem OneToOne과 title/category/summary/status/reviewed_by/reviewed_at을 가진다. pending/published/rejected와 검수 정보의 일치에 DB check를 둔다. News는 Candidate OneToOne, Source, source_url/title/category/summary/published_at/created_at을 가진다. FK는 PROTECT이며 News는 승인 당시 값의 snapshot이다. summary는 첫 adapter에서 빈 문자열, category는 goods다. cross-table snapshot 일치는 서비스와 테스트가 보장한다. News의 최신순 및 category 최신순 인덱스를 둔다.

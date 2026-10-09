@@ -10,7 +10,7 @@
 | encounters | Spawn Rule, 발급·만료·재사용, Capture 최종 결과 | Phase 5~6 |
 | collection | 사용자별 획득 개체와 본인 목록 | Phase 6; 진행률은 후속 |
 | community | 게시글·평면 댓글·좋아요·신고·moderation | Phase 7 API/Admin |
-| news | 수집 출처·후보·검수·발행 | 후속 |
+| news | 수집 출처·최초 metadata·후보·검수·발행 | Phase 8 수동 수집/API/Admin |
 | batch | Job·Schedule·Execution, 실행 운영 | 후속 |
 | events / notifications | 이벤트 조건 / 알림 전달 | 후속 |
 
@@ -70,3 +70,12 @@ Category는 고정 TextChoices다. 운영 편집 요구가 없으므로 별도 �
 작성자는 본인 콘텐츠만 수정·삭제한다. 삭제 시 Post/자식 Comment 원문을 제거하고 Like를 삭제하되 관계 tombstone과 미처리 신고 증거는 유지한다. hidden은 복원 가능하고 deleted는 복원 불가다. 부모 숨김은 자식 상태를 바꾸지 않는다. 공개 조회는 비로그인에도 허용하고 이메일은 반환하지 않는다.
 
 운영자는 staff와 view 및 moderate_post/moderate_comment/review_report 권한을 갖춰야 한다. 원문 편집은 superuser도 Admin에서 불가능하다. 신고 수용은 대상 숨김과 증거 제거, 기각은 증거 제거만 수행한다. 처리 기록과 안전한 Admin audit는 같은 트랜잭션에 포함한다. 신고 증거·설명은 처리 완료까지 보관하므로 미처리 backlog를 운영자가 점검해야 한다. 만료 Batch는 없다.
+
+
+## Phase 8 — News 수동 수집과 검수
+
+news가 Source → RawItem → NewsCandidate → News를 소유한다. API 서버는 수집을 실행하지 않으며 collect_news 관리 명령을 명시적으로 실행한다. 최초 수집만 pending Candidate를 만들고 승인하면 같은 트랜잭션에서 published와 News를 생성한다. 재수집은 pending/rejected/published 모두 변경하지 않는다. metadata hash가 달라도 새 Candidate·revision·재검수를 만들지 않으며 News는 승인 시점의 서비스 데이터다.
+
+첫 Source는 DreamNews의 드리텍 회사 목록 첫 페이지에서 제목에 ちいかわ가 포함된 상품 발표 최대 5개다. 비영리 MVP에서 원문 제목·발표일·링크만 사용한다. 본문·이미지·요약 재게시가 없고 제목 수정도 허용하지 않는다. 이용 정책: https://www.dreamnews.jp/sitepolicy / robots: https://www.dreamnews.jp/robots.txt . 공식 chiikawa-info.jp는 직접 요청의 challenge 때문에, 치이카와 마켓은 이용 제한 때문에 첫 parser에서 제외했다. 상업적 이용 전 정책을 별도로 검토한다.
+
+저장은 Source 잠금 아래 식별자를 재검사하고 RawItem/Candidate를 함께 생성한다. 검수는 Candidate 잠금 아래 News·상태·검수자·audit를 함께 저장한다. 네트워크와 대기는 atomic 밖이다. 새 라이브러리·큐·스케줄러·revision은 없다. 변경 추적, 재검수, 추가 Source, 상업화·본문 이용, 비동기 수집은 후속 고려사항이다.
