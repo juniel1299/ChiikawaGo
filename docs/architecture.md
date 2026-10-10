@@ -109,3 +109,11 @@ Celery 5.6.3과 RabbitMQ 4.3.6 기본 이미지(관리 UI 없음)를 사용한�
 DB commit 이후에만 on_commit으로 발행한다. commit과 publish 사이 crash 누락은 outbox 없이 보장할 수 없으며 수동 재실행 대상이다. late ACK를 사용하되 일반 실패와 개별 자식 프로세스 비정상 종료는 ACK하고 자동 requeue하지 않는다. Worker 전체 연결 소실로 재전달되면 기존 unique와 항목별 atomic으로 중복을 방지한다. 이미 커밋한 항목은 유지되고 진행 중인 항목만 rollback한다.
 
 RabbitMQ 4.3 호환을 위해 Celery control/event queue는 exclusive로 명시한다. 수집 작업 큐는 durable classic을 유지한다. [Celery 설정](https://docs.celeryq.dev/en/v5.6.3/userguide/configuration.html#control-queue-exclusive)
+
+## Phase 10 — DB Batch Platform
+
+Next.js `/batch` → 허용된 BFF Route Handler → Django Batch API → PostgreSQL 원장 → RabbitMQ `batch.execute` → 동일 Backend Worker → News/Accounts 서비스로 연결한다. 최초 화면은 RSC가 Django를 직접 조회한다. 변경은 기존 JWT HttpOnly 쿠키·Origin/CSRF 검증을 사용한다. 화면이 보이는 동안 10초마다 갱신하고 TanStack Query/Zustand는 추가하지 않는다.
+
+별도 `run_batch_scheduler` 프로세스는 5초마다 DB의 due Schedule과 발행 대기를 확인한다. Compose의 scheduler profile을 명시적으로 켠다. 로컬과 운영 모두 DB Cron을 사용하므로 LOCAL_SCHEDULER_ENABLED나 코드 Cron은 없다. 최근 정상 tick 파일로 health를 확인한다. RabbitMQ 장애는 기존 API readiness와 결합하지 않는다.
+
+Execution을 전달 의도로 사용해 on_commit 누락을 복구한다. 별도 outbox/beat/result backend는 없다. croniter 6.2.4만 추가해 Cron 날짜/윤년/이전·다음 계산을 재사용한다. DST 지역·다중 Schedule·Source 병렬 실행·이력 자동 정리·자동 장애 판정은 후속이다.

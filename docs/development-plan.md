@@ -232,3 +232,32 @@ Phase 8 체크포인트 88573159를 feat/crawler-news에 push하고 feat/async-c
 - 최종 기본 Backend 전체 **309개 통과, broker 11개 skip**. CELERY_BROKER_URL을 접속 불가능한 주소로 지정해 기본 기능·동기 경로가 broker 연결을 요구하지 않는 것도 확인했다. 별도 실제 broker **11개 통과**와 합쳐 320개 테스트를 검증했다. 정책 미확인 Source 테스트 fixture는 기존 DB 제약에 맞게 비활성 상태로 생성했다.
 
 Phase 9 완료 조건을 충족한다. DB commit/publish 사이의 누락 가능성 및 자식 프로세스 강제 종료의 수동 복구 한계는 유지하며, 영구 실행 이력과 전달 보장 강화는 Phase 10에서 검토한다.
+
+## Phase 10 — 적용 및 운영 정책
+
+Phase 9 체크포인트 623dfe36 (`feat: add celery rabbitmq async crawler worker`)을 origin/feat/async-crawler에 push하고 feat/batch-platform에서 구현한다. 기존 news.collect 큐의 ready/unacked와 Worker active/reserved/scheduled가 비어 있는 것을 확인한 뒤 Worker를 중지했다.
+
+적용 순서: 기존 비동기 접수 중지 및 큐 drain → 새 이미지 → migrate → configure_batch_jobs → Batch Worker 시작. 초기 Job은 비활성이며 Schedule은 생성하지 않는다. `/batch`에서 staff에게 view_batch와 필요한 run_batch/manage_batch를 부여하고 Source/활성을 설정한다. 운영 Cron은 화면에서 등록한다. 기본 예시는 입력 편의일 뿐 저장/활성화 전 실행되지 않는다.
+
+News 실행은 기존 Source 활성/robots/요청 간격/metadata 불변 정책을 재검증한다. transient만 같은 원장에서 최대 2회 자동 retry하며 동기 명령은 자동 retry하지 않는다. `collect_news`와 `enqueue_news_collection` 모두 설정된 활성 News Job/Source를 필요로 한다. 동기 명령은 broker 없이 원장을 남기고 기존 카운터/실패 종료 코드를 유지한다. enqueue 명령은 실행 접수 ID와 task ID를 출력하며 수집 성공을 뜻하지 않는다.
+
+Scheduler misfire는 유효 기간의 가장 최근 회차 하나로 합친다. busy 상태에는 due를 보존하고 실행 종료 후 합친다. 일정 수정/재활성화는 미래 회차부터, 이미 끝난 기간은 보정 실행하지 않는다. API/Worker는 전체 업무를 atomic으로 묶지 않는다. 토큰 정리는 고정 cutoff에서 만료 OutstandingToken을 500개씩 먼저 잠그며 잠긴 행을 건너뛴다. 각 묶음의 blacklist 삭제는 같은 트랜잭션이다.
+
+RUNNING의 hard limit+120초 경과는 경고일 뿐이다. Worker의 실제 종료를 확인하고 실패 확정한 다음 Retry한다. 기존 업무의 부분 성공 가능성이 있으므로 뉴스 중복 제약·토큰 정리 재실행 안전성이 필요하다. 전달 중복/최종 원장 저장 실패는 자동으로 성공 처리하지 않는다.
+
+검증은 실제 PostgreSQL 및 별도 RabbitMQ/prefork Worker, 합성 HTTP fixture를 사용한다. 자동 테스트는 실제 출처에 접근하지 않는다. 원격 CI 실행 여부와 로컬 결과는 별도로 기록한다.
+
+## 2026-10-11 Phase 10 검증 결과
+
+- 최종 Backend 기본 회귀 **342개 통과**, broker 그룹 16개는 별도 실행으로 분리했다. 실제 PostgreSQL/PostGIS에서 접수/claim/Retry 경합, Scheduler 잠금·misfire, DB 제약, rollback, migration upgrade 시 기존 News·Collection 보존을 확인했다.
+- 실제 RabbitMQ와 별도 prefork Worker **16개 통과**. API 접수 후 broker 장애 복구, 중복 메시지, 발행 확인 후 DB 기록 유실, retry 발행 유실, 전체/자식 Worker 종료, 최종 원장 기록 실패, JSON 제한 및 토큰 정리 실행을 검증했다. 외부 사이트 대신 고정 HTTP fixture를 사용했다.
+- 토큰 정리는 Refresh/Logout이 실제 OutstandingToken 잠금을 보유할 때 건너뛰고, blacklist 관계와 함께 원자적으로 삭제되는 것을 검증했다. 기존 인증 정책과 news 검수/발행 불변 정책은 유지한다.
+- Worker가 publisher보다 먼저 완료해도 발행 확인 시각을 기록하며 완료 상태/다음 시도 시각을 덮어쓰지 않도록 경합 회귀 테스트를 추가했다.
+- Ruff check/format, Django check, migration drift, OpenAPI validation과 실제 응답 계약 테스트 통과. Backend 이미지도 새 lockfile로 빌드했다.
+- Frontend ESLint/TypeScript, Vitest **9개**, 실제 Chromium E2E **4개** 통과. E2E는 인증/CSRF와 Batch 운영자 RSC·권한별 버튼·실제 잘못된 Cron 거부를 포함한다. 임시 운영자와 토큰은 테스트 종료 시 제거한다. Run Now 응답 유실/중복 클릭의 동일 키 유지, 스케줄 오류와 stale 확인 UI는 단위 테스트로 검증했다.
+- 별도 Node 22 컨테이너의 Next.js production build 통과. 호스트 E2E runner는 기존 Node 23.7.0이다. 생성된 next-env 변경은 복원했다.
+- 로컬 DB에 batch.0001_initial을 적용하고 명시적인 등록 명령으로 **비활성 Job 2개, Schedule 0개, Execution 0개**를 확인했다. API/Web/DB/RabbitMQ/Worker/Scheduler healthcheck 통과. 실제 News 수집이나 토큰 정리 Job을 로컬 운영 데이터에 실행하지 않았다.
+- CI에 초기 Job 등록·Scheduler 단일 tick 및 Scheduler profile 기동을 추가했다. 위 결과는 로컬 검증이며 원격 GitHub Actions는 실행하지 않았다.
+- 추적 파일에서 .env·개인 경로·개인키/토큰 패턴과 불필요한 생성물을 확인하지 못했다. Phase 10 변경은 feat/batch-platform에 **미커밋**으로 남긴다.
+
+완료 범위는 DB 일정/원장/전달 복구와 최소 운영 화면이다. 자동 장애 판정, exactly-once 업무 수행, DST 시간대, 다중 Schedule/Source 병렬 실행, 실행 이력 자동 삭제는 구현하지 않았다. 동기 수집 명령에는 Celery 프로세스 시간 제한이 적용되지 않으며 기존 HTTP timeout과 원장/실행 중복 제한을 사용한다. 주기적 일정과 발행 유실 복구를 사용하려면 scheduler profile을 실행해야 한다.

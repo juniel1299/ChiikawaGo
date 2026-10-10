@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     "apps.collection",
     "apps.community",
     "apps.news",
+    "apps.batch",
 ]
 MIDDLEWARE = [
     "config.middleware.RequestLogMiddleware",
@@ -102,7 +103,7 @@ SIMPLE_JWT = {
 }
 SPECTACULAR_SETTINGS = {
     "TITLE": "CHII WORLD API",
-    "DESCRIPTION": "Phase 0–8: core MVP, community and reviewed news.",
+    "DESCRIPTION": "Phase 0–10: core MVP, community, reviewed news and batch operations.",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
@@ -146,19 +147,19 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_RESULT_BACKEND = None
 CELERY_TASK_IGNORE_RESULT = True
 CELERY_TASK_STORE_ERRORS_EVEN_IF_IGNORED = False
-CELERY_TASK_DEFAULT_QUEUE = "news.collect"
-CELERY_TASK_DEFAULT_EXCHANGE = "news.collect"
+CELERY_TASK_DEFAULT_QUEUE = "batch.execute"
+CELERY_TASK_DEFAULT_EXCHANGE = "batch.execute"
 CELERY_TASK_DEFAULT_EXCHANGE_TYPE = "direct"
-CELERY_TASK_DEFAULT_ROUTING_KEY = "news.collect"
+CELERY_TASK_DEFAULT_ROUTING_KEY = "batch.execute"
 CELERY_TASK_QUEUES = {
-    "news.collect": {
-        "exchange": "news.collect",
-        "routing_key": "news.collect",
+    "batch.execute": {
+        "exchange": "batch.execute",
+        "routing_key": "batch.execute",
         "durable": True,
         "queue_arguments": {"x-queue-type": "classic"},
     },
 }
-CELERY_TASK_ROUTES = {"news.collect_news_source": {"queue": "news.collect"}}
+CELERY_TASK_ROUTES = {"batch.execute": {"queue": "batch.execute"}}
 CELERY_TASK_CREATE_MISSING_QUEUES = False
 CELERY_TASK_DEFAULT_DELIVERY_MODE = "persistent"
 CELERY_BROKER_TRANSPORT_OPTIONS = {"confirm_publish": True}

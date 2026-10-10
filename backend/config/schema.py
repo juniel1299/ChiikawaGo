@@ -21,7 +21,9 @@ def add_error_responses(result, generator, request, public):
             if method not in {"get", "post", "put", "patch", "delete"}:
                 continue
             statuses = ["400", "401", "403", "404", "405", "500"]
-            if operation.get("operationId") in {"encounters_create", "encounters_capture"}:
+            if operation.get("operationId", "").startswith("batch_") or operation.get(
+                "operationId"
+            ) in {"encounters_create", "encounters_capture"}:
                 statuses.append("409")
             for status in statuses:
                 operation["responses"].setdefault(

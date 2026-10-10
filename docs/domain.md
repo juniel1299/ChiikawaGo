@@ -11,7 +11,7 @@
 | collection | 사용자별 획득 개체와 본인 목록 | Phase 6; 진행률은 후속 |
 | community | 게시글·평면 댓글·좋아요·신고·moderation | Phase 7 API/Admin |
 | news | 수집 출처·최초 metadata·후보·검수·발행 | Phase 8 수동 수집/API/Admin |
-| batch | Job·Schedule·Execution, 실행 운영 | 후속 |
+| batch | Job·Schedule·Execution, 실행 운영 | Phase 10 API/Next.js |
 | events / notifications | 이벤트 조건 / 알림 전달 | 후속 |
 
 ## 주요 결정
@@ -79,3 +79,11 @@ news가 Source → RawItem → NewsCandidate → News를 소유한다. API 서�
 첫 Source는 DreamNews의 드리텍 회사 목록 첫 페이지에서 제목에 ちいかわ가 포함된 상품 발표 최대 5개다. 비영리 MVP에서 원문 제목·발표일·링크만 사용한다. 본문·이미지·요약 재게시가 없고 제목 수정도 허용하지 않는다. 이용 정책: https://www.dreamnews.jp/sitepolicy / robots: https://www.dreamnews.jp/robots.txt . 공식 chiikawa-info.jp는 직접 요청의 challenge 때문에, 치이카와 마켓은 이용 제한 때문에 첫 parser에서 제외했다. 상업적 이용 전 정책을 별도로 검토한다.
 
 저장은 Source 잠금 아래 식별자를 재검사하고 RawItem/Candidate를 함께 생성한다. 검수는 Candidate 잠금 아래 News·상태·검수자·audit를 함께 저장한다. 네트워크와 대기는 atomic 밖이다. 새 라이브러리·큐·스케줄러·revision은 없다. 변경 추적, 재검수, 추가 Source, 상업화·본문 이용, 비동기 수집은 후속 고려사항이다.
+
+## Phase 10 — Batch 운영 경계
+
+batch는 허용된 Job 정의, DB Cron, 접수/시도/최종 결과 원장과 운영 권한을 소유한다. news는 수집과 중복/검수/발행을 유지하고 accounts는 만료 토큰 삭제를 소유한다. registry는 news_collection, expired_token_cleanup 두 코드만 실행한다. DB에 import path나 임의 실행 파라미터를 저장하지 않는다.
+
+변경 잠금 순서는 Job → Schedule(필요 시) → Execution이다. Job별 queued/running/retry_wait는 하나이며 unique constraint와 행 잠금을 함께 사용한다. 서비스/HTTP/메시지 발행은 원장 트랜잭션 밖에서 수행한다. Source를 바꾸는 것은 미완료 Execution이 없을 때만 가능하다. 비활성화는 신규 접수를 막고 기존 접수는 취소하지 않는다.
+
+Celery 전달은 중복될 수 있다. Worker는 Execution의 상태와 예상 시도 번호를 잠금 후 확인하고 한 번만 시작한다. RUNNING 메시지 재전달은 재실행하지 않는다. 장기 RUNNING은 자동 실패가 아니라 불확실 상태이며 운영자가 기존 실행 종료를 확인한 뒤 실패 확정·새 Retry를 수행한다. 최종 상태는 늦은 Worker 완료로 덮어쓰지 않는다.

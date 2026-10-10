@@ -1,12 +1,12 @@
 from django.core.management.base import BaseCommand, CommandError
+from rest_framework.exceptions import APIException
 
-from apps.news.enqueue import EnqueueError, enqueue_collection
+from apps.news.enqueue import enqueue_collection
 from apps.news.models import Source
-from apps.news.parser import CollectionError
 
 
 class Command(BaseCommand):
-    help = "Enqueue one source; a task ID confirms publishing, not collection success."
+    help = "Accept a batch execution; acceptance does not confirm delivery or collection."
 
     def add_arguments(self, parser):
         parser.add_argument("--source", required=True)
@@ -14,7 +14,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         try:
             source = Source.objects.get(code=options["source"])
-            task_id = enqueue_collection(source.pk)
-        except (Source.DoesNotExist, CollectionError, EnqueueError):
-            raise CommandError("Source unavailable or broker publishing failed.") from None
-        self.stdout.write(f"published task_id={task_id}")
+            row = enqueue_collection(source.pk)
+        except (Source.DoesNotExist, APIException):
+            raise CommandError(
+                "Source/Batch Job unavailable or another execution is active."
+            ) from None
+        self.stdout.write(f"accepted execution_id={row.pk} task_id={row.celery_task_id}")

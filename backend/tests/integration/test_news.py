@@ -197,7 +197,7 @@ def test_identity_conflict(news_source, news_item, news_candidate):
     assert NewsCandidate.objects.count() == 1
 
 
-def test_fixture_pipeline_command_to_public_api(news_source, moderator, client):
+def test_fixture_pipeline_command_to_public_api(news_source, news_job, moderator, client):
     responses = {
         crawler.ROBOTS_URL: "User-agent: *\nDisallow:\n",
         crawler.DREAMNEWS_LIST: (FIXTURES / "list.html").read_text(),
@@ -217,7 +217,7 @@ def test_fixture_pipeline_command_to_public_api(news_source, moderator, client):
     assert client.get("/api/v1/news").json()["count"] == 1
 
 
-def test_partial_collection_failure_preserves_success(news_source):
+def test_partial_collection_failure_preserves_success(news_source, news_job):
     listing = (FIXTURES / "list.html").read_text()
     listing += listing.replace("0000000001", "0000000004")
     responses = {
@@ -235,7 +235,7 @@ def test_partial_collection_failure_preserves_success(news_source):
     assert NewsCandidate.objects.count() == 1
 
 
-def test_inactive_source(news_source, news_item):
+def test_inactive_source(news_source, news_job, news_item):
     news_source.is_active = False
     news_source.save()
     with pytest.raises(CollectionError):

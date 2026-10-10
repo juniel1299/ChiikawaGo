@@ -104,3 +104,13 @@ Source는 UUID/code/name/source_type/adapter_key/base_url/is_active/policy_url/p
 RawItem은 Source, external_id(앞자리 0 보존), canonical_url, title, published_at, collected_at, metadata_hash를 저장한다. 전체 HTML/본문/이미지를 보관하지 않는다. Source+external_id 및 Source+canonical_url은 각각 unique이며 제목/hash는 unique가 아니다.
 
 NewsCandidate는 RawItem OneToOne과 title/category/summary/status/reviewed_by/reviewed_at을 가진다. pending/published/rejected와 검수 정보의 일치에 DB check를 둔다. News는 Candidate OneToOne, Source, source_url/title/category/summary/published_at/created_at을 가진다. FK는 PROTECT이며 News는 승인 당시 값의 snapshot이다. summary는 첫 adapter에서 빈 문자열, category는 goods다. cross-table snapshot 일치는 서비스와 테스트가 보장한다. News의 최신순 및 category 최신순 인덱스를 둔다.
+
+## Phase 10 — Batch 모델
+
+- BatchJob: UUID, 허용 code(unique/check), name/description, enabled, nullable Source(PROTECT), timestamps. 초기 등록 명령만 두 비활성 Job을 만들고 migration은 데이터를 넣지 않는다. timeout/retry 정책은 코드 registry에 있으며 화면에서 읽기 전용이다.
+- BatchSchedule: Job OneToOne(PROTECT), 숫자 기반 5필드 Cron, timezone(UTC/Asia/Seoul check), enabled, starts_at/ends_at, last_scheduled_at/next_run_at. 시작 포함·종료 제외, UTC 저장. Cron 계산은 croniter 6.2.4, 날짜 탐색은 8년으로 제한한다. 일/요일 동시 제한은 OR다.
+- BatchExecution: Job/Schedule/retry_of/요청자(PROTECT), 예정·접수·시작·현재 시도·종료 시각, 접수 UUID 키, 제한된 Source/실행 정책 snapshot, status/attempt, 전달 예약·발행 횟수·task ID, worker, 시도별 안전한 결과, 실패·운영 확인 정보. 별도 Attempt/result-backend 테이블은 없다.
+- Job별 미완료 행 조건부 unique, schedule+scheduled_for unique, actor+job+key 조건부 unique(NULL actor도 중복 방지), retry_of OneToOne, status/trigger/attempt/종료 시각 check로 보호한다. 결과는 queued → running → success/failed 또는 retry_wait → running이다.
+- 자동 retry는 같은 원장에서 최대 세 시도, 운영자 Retry는 새 행이며 실패한 원본당 후속 하나다. 동기 실행은 task ID가 없고 scheduler 재발행 대상에서 제외된다.
+
+next_dispatch_at은 짧은 잠금으로 발행 선점과 유실 복구를 지원한다. publisher confirm 후 Worker 시작이 없으면 120초 뒤 재확인하고 발행 실패는 30초 뒤 재시도한다. commit/publish 원자성이나 exactly-once 부작용을 보장하지 않는다. stale은 현재 시도 시작+hard limit+120초로 계산하며 저장 상태를 자동 변경하지 않는다.

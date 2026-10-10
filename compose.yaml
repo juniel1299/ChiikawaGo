@@ -65,7 +65,7 @@ services:
     environment: *backend_environment
     volumes:
       - ./backend:/app
-    command: ["celery", "-A", "config", "worker", "--loglevel=INFO", "--pool=prefork", "--concurrency=1", "--queues=news.collect", "--hostname=crawler@%h"]
+    command: ["celery", "-A", "config", "worker", "--loglevel=INFO", "--pool=prefork", "--concurrency=1", "--queues=batch.execute", "--hostname=crawler@%h"]
     stop_grace_period: 700s
     depends_on:
       db:
@@ -78,6 +78,24 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+  scheduler:
+    image: chii-world-api
+    build: ./backend
+    profiles: [scheduler]
+    environment: *backend_environment
+    volumes:
+      - ./backend:/app
+    command: ["python", "manage.py", "run_batch_scheduler"]
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,time; assert time.time()-os.path.getmtime('/tmp/batch-scheduler-heartbeat') < 30"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
   web:
     build: ./frontend
     environment:

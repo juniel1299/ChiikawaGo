@@ -1,34 +1,18 @@
-from uuid import UUID, uuid4
+from uuid import uuid4
 
-from django.db import transaction
+from rest_framework.exceptions import ValidationError
 
-from .models import Source
-from .services import require_source
-from .tasks import collect_news_source, task_log
+from apps.batch.models import BatchJob
+from apps.batch.services import request_run
 
 
-class EnqueueError(Exception):
-    pass
+def configured_job(source_id):
+    job = BatchJob.objects.filter(code=BatchJob.Code.NEWS, source_id=source_id).first()
+    if not job:
+        raise ValidationError("Batch Job을 등록하고 Source를 연결하세요.")
+    return job
 
 
 def enqueue_collection(source_id):
-    source_id = str(UUID(str(source_id)))
-    source = Source.objects.get(pk=source_id)
-    require_source(source)
-    task_id = str(uuid4())
-
-    def publish():
-        try:
-            collect_news_source.apply_async(
-                args=[source_id],
-                task_id=task_id,
-                retry=False,
-            )
-        except Exception:
-            task_log("publish_failed", task_id, source_id)
-            raise EnqueueError("broker_publish_failed") from None
-        task_log("published", task_id, source_id)
-
-    transaction.on_commit(publish)
-    # Inside an atomic block this is a reserved ID, not a publish receipt.
-    return task_id
+    execution, _ = request_run(job_id=configured_job(source_id).pk, key=uuid4())
+    return execution

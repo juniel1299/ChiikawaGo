@@ -108,3 +108,12 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "broker" in item.keywords:
                 item.add_marker(skip)
+
+
+@pytest.fixture
+def news_job(news_source):
+    from apps.batch.models import BatchJob
+
+    return BatchJob.objects.create(
+        code="news_collection", name="News", enabled=True, source=news_source
+    )

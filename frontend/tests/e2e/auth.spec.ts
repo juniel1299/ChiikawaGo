@@ -48,3 +48,10 @@ test("CSRF 없는 요청과 다른 Origin의 변경 요청을 차단한다", asy
   });
   expect(response.status()).toBe(403);
 });
+
+test("Batch 비로그인 화면과 변경 요청 CSRF 차단", async ({ page, request }) => {
+  await page.goto("/batch");
+  await expect(page.getByRole("button", { name: "로그인 연장" })).toBeVisible();
+  const response = await request.post("/api/batch/jobs/11111111-1111-4111-8111-111111111111/runs", { data: {} });
+  expect(response.status()).toBe(403);
+});

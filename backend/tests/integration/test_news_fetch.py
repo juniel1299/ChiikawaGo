@@ -162,7 +162,9 @@ def test_robots_disallow_makes_no_request(news_source, monkeypatch):
     opener.open.assert_not_called()
 
 
-def test_fixed_http_pipeline_to_review_and_public_api(news_source, moderator, client, monkeypatch):
+def test_fixed_http_pipeline_to_review_and_public_api(
+    news_source, news_job, moderator, client, monkeypatch
+):
     from io import StringIO
 
     from django.core.management import call_command

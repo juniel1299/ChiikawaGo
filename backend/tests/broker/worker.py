@@ -17,7 +17,8 @@ from celery import current_task  # noqa: E402
 from django.conf import settings  # noqa: E402
 from kombu import Queue  # noqa: E402
 
-from apps.news import crawler, tasks  # noqa: E402
+from apps.batch import services, tasks  # noqa: E402
+from apps.news import crawler  # noqa: E402
 from apps.news.models import NewsCandidate  # noqa: E402
 from config.celery import app  # noqa: E402
 
@@ -31,7 +32,7 @@ listing = (fixtures / "list.html").read_text()
 detail = (fixtures / "detail.html").read_text()
 url = "https://www.dreamnews.jp/press/0000000001"
 # Keep production retry limits; remove real-time delays only inside this test process.
-tasks.random.uniform = lambda a, b: 0
+services.random.uniform = lambda a, b: 0
 crawler.INTERVAL_SECONDS = 0
 
 
@@ -49,7 +50,7 @@ class FixtureTransport:
         address = request.full_url
         with (control / "requests").open("a") as log:
             log.write(json.dumps({"url": address, "retry": current_task.request.retries}) + "\n")
-        if mode == "transient" and current_task.request.retries == 0:
+        if mode in ("transient", "retry_publish_lost") and current_task.request.retries == 0:
             raise TimeoutError("test timeout")
         if mode == "exhaust":
             raise TimeoutError("test timeout")
@@ -91,12 +92,31 @@ if mode == "rollback":
 
     NewsCandidate.save = fail_once
 
+if mode == "retry_publish_lost":
+    original_retry = tasks.execute.retry
+
+    def lose_retry(*args, **kwargs):
+        if not (control / "once").exists():
+            (control / "once").write_text("lost")
+            raise OSError("injected broker loss")
+        return original_retry(*args, **kwargs)
+
+    tasks.execute.retry = lose_retry
+
+if mode == "completion_lost":
+
+    def fail_completion(*args, **kwargs):
+        (control / "completion_lost").write_text("ready")
+        raise RuntimeError("injected final record failure")
+
+    services.finish_attempt = fail_completion
+
 app.conf.update(
     CELERY_TASK_QUEUES=[Queue(queue, exchange=queue, routing_key=queue, durable=True)],
     CELERY_TASK_DEFAULT_QUEUE=queue,
     CELERY_TASK_DEFAULT_EXCHANGE=queue,
     CELERY_TASK_DEFAULT_ROUTING_KEY=queue,
-    CELERY_TASK_ROUTES={"news.collect_news_source": {"queue": queue}},
+    CELERY_TASK_ROUTES={"batch.execute": {"queue": queue}},
 )
 app.worker_main(
     [

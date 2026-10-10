@@ -154,3 +154,23 @@ Admin moderation은 별도의 세션/CSRF 화면이다. hidden/deleted 차이와
 ## Phase 8 — 공개 News
 
 GET /api/v1/news, GET /api/v1/news/{id}: 인증 없이 발행된 News만 조회한다. 필드는 id/title/category/summary/source({code,name})/source_url/published_at/created_at이다. published_at은 원문 발표 UTC, created_at은 승인·서비스 발행 시각이다. 첫 Source의 summary는 빈 문자열이다. category는 news/goods/event/collaboration이고 잘못된 필터는 400이다. 기본 20/최대 100 pagination, published_at DESC/id DESC를 사용한다. Source 비활성화는 이미 발행된 News를 숨기지 않는다. 쓰기 API, source 필터, 검색, 사용자 정렬은 없다. 검수는 Admin의 CSRF 보호 POST와 별도 review_newscandidate 권한으로만 수행한다.
+
+## Phase 10 — 운영 Batch API
+
+`/api/v1/batch` 아래 API는 활성 staff와 `batch.view_batch`를 요구한다. 미인증 401, 권한 부족 403. 응답은 no-store다. 변경은 추가 `run_batch` 또는 `manage_batch` 권한을 요구하며 실패 확정에는 둘 다 필요하다. Django Admin은 조회 전용이다.
+
+| 경로 | 메서드 / 기능 |
+|---|---|
+| /capabilities | GET: view/run/manage |
+| /jobs | GET: 허용된 두 Job, 실행 정책·마지막/현재 실행 |
+| /jobs/{id} | PATCH: enabled, source_id만 |
+| /sources | GET: 선택 가능한 Source 정보 |
+| /schedules | GET, POST: Job당 일정 하나 |
+| /schedules/{id} | GET, PATCH: Cron·시간대·기간·활성 상태 |
+| /jobs/{id}/runs | POST: 신규 202, 동일 접수 200 |
+| /executions | GET: job/status 필터, 20/100 pagination, requested_at DESC/id DESC |
+| /executions/{id} | GET: 시도별 결과·안전한 실패·task/worker·Retry 관계 |
+| /executions/{id}/retry | POST: 실패 원본에서 새 접수 202, 이미 있는 후속 200 |
+| /executions/{id}/confirm-failure | POST: worker_stopped=true 명시 확인, stale만 200 |
+
+Run Now/Retry에는 UUID `Idempotency-Key`와 빈 JSON 객체를 사용한다. 같은 actor/job/key로 다른 동작을 요청하면 409. 다른 키로 미완료 Job을 요청해도 409(job_busy). 202는 DB 원장 접수이며 broker 전송/수집 성공이 아니다. 네트워크 응답 유실 후 클라이언트는 같은 키를 유지한다. 일반 공개 API와 수집/검수 정책은 변하지 않는다.
