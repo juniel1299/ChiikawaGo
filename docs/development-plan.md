@@ -211,3 +211,24 @@ robots 확인 → 목록 첫 페이지 → 치이카와 상품 상세 최대 5�
 - 전체 HTML·기사 본문·이미지·신규 라이브러리·Frontend 기능·Compose·기존 도메인 변경 없음. next-env.d.ts의 타입 생성 변경은 복원했다. 원격 GitHub Actions 결과는 확인하지 않았으며 위 결과는 로컬 검증이다.
 
 Phase 8의 수동 수집/API/Admin 완료 조건을 충족한다. 이는 상업적 사용 권한이나 공개 운영 준비 완료를 뜻하지 않는다. Published News 자동 갱신, 변경본 Candidate, revision·재검수, 큐/스케줄러는 구현하지 않았다. 다음 실제 수집은 운영 기본인 하루 한 번 간격을 따른다.
+
+## Phase 9 — 구현 정책
+
+Phase 8 체크포인트 88573159를 feat/crawler-news에 push하고 feat/async-crawler에서 진행한다. 동기 수집의 출력·종료 코드는 유지한다. collect()는 카운터와 안전한 실패 코드/단계/재시도 가능성을 반환한다. timeout·connection reset/refused·일시적 DNS 실패만 task 수준에서 최대 2회, 60/120초 상한의 full jitter로 재시도한다. HTTP 오류(403/429/5xx 포함), robots/policy/challenge, TLS·영구 DNS, parser, DB/내부 오류, task 시간 제한은 재시도하지 않는다. 하나라도 영구 실패가 섞이면 전체 실행을 자동 재시도하지 않는다.
+
+수집 재실행은 robots/Source/10초 간격을 다시 검사한다. Published News/기존 Candidate를 변경하지 않는다. received/started/retry/succeeded/failed와 broker 확인 후 published를 로그·Celery 이벤트로 관측하며 영구 execution 원장은 없다. task ID는 atomic 안에서는 예약 ID일 뿐이며 실제 발행은 commit 후다. 비활성/미존재 Source는 안전한 실패로 기록한다.
+
+기본 pytest는 broker marker를 건너뛴다. 실제 RabbitMQ 테스트는 RUN_BROKER_TESTS=1과 전용 queue/테스트 DB/별도 prefork Worker로 실행한다. 테스트 Worker의 HTTP transport만 합성 fixture로 대체하고 운영 task와 crawler는 그대로 사용한다. CI에서 실제 외부 사이트를 호출하지 않는다. Admin Run Now, HTTP enqueue API, BatchJob/Schedule/Execution, DB Scheduler, 자동 발행은 Phase 9에서 제외한다.
+
+## 2026-10-10 Phase 9 검증 기록
+
+- Phase 8 체크포인트 **88573159** (`feat: complete manual news crawler and review flow`)을 origin/feat/crawler-news에 push했다. Phase 9 작업 브랜치는 feat/async-crawler이며 Phase 9 변경은 아직 commit/push하지 않았다.
+- Celery 5.6.3과 RabbitMQ 4.3.6을 실제 연결했다. RabbitMQ 이미지 digest를 고정하고, RabbitMQ 4.3에서 거부하는 기본 비영속·비독점 제어 큐를 control/event exclusive 설정으로 교체했다. broker의 deprecated 기능을 다시 허용하지 않았다. 수집 큐는 durable classic/persistent를 유지한다.
+- 실제 RabbitMQ와 별도 prefork Worker 통합 **11개 통과**. 중복 전달, transient 재시도/소진, 403 비재시도, 저장 rollback, 전체 Worker 종료 후 재전달, 자식 프로세스 종료 후 수동 재실행, JSON 이외 payload 거부, 실제 received/started/retried/succeeded/failed 이벤트를 검증했다. 테스트 큐·프로세스·연결은 종료 후 정리됐다.
+- Ruff check/format, Django check, migration drift, OpenAPI validation 통과. 신규 migration·공개 API·Phase 0~8 비즈니스 모델 변경 없음.
+- Frontend ESLint/TypeScript, Vitest **4개**, Chromium 인증/CSRF E2E **2개**, 별도 Node 22 컨테이너의 Next.js production build 통과. E2E runner는 기존 호스트 Node 23.7.0을 사용했다. frontend 생성 파일은 복원했으며 변경하지 않았다.
+- Compose의 DB/API/Web/RabbitMQ/Worker 모두 healthy, Worker 지정 ping 성공. RabbitMQ 호스트 포트·관리 UI·result backend·자동 승인·revision workflow·scheduler는 추가하지 않았다.
+- GitHub Actions에 별도 broker 테스트 단계를 추가했다. 위 결과는 로컬 실행 결과이며 원격 Actions는 실행하지 않았다. 실제 외부 사이트 수집은 이번 검증에서 수행하지 않았다.
+- 최종 기본 Backend 전체 **309개 통과, broker 11개 skip**. CELERY_BROKER_URL을 접속 불가능한 주소로 지정해 기본 기능·동기 경로가 broker 연결을 요구하지 않는 것도 확인했다. 별도 실제 broker **11개 통과**와 합쳐 320개 테스트를 검증했다. 정책 미확인 Source 테스트 fixture는 기존 DB 제약에 맞게 비활성 상태로 생성했다.
+
+Phase 9 완료 조건을 충족한다. DB commit/publish 사이의 누락 가능성 및 자식 프로세스 강제 종료의 수동 복구 한계는 유지하며, 영구 실행 이력과 전달 보장 강화는 Phase 10에서 검토한다.

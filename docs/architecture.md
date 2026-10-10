@@ -6,6 +6,7 @@
 Browser → Next.js (RSC + 필요한 Route Handler) → Django REST API → PostgreSQL/PostGIS
 Operator → Django Admin ────────────────────────────────┘
 API tests / future Flutter → Django REST API
+Manual enqueue → RabbitMQ → Celery Worker → 기존 news 수집 서비스 → 동일 PostgreSQL
 ```
 
 Django는 Modular Monolith다. 데이터·권한·게임 규칙의 최종 판단은 Django에 있고 Next.js는 DB에 접근하지 않는다. Web과 API가 별도 프로세스인 것은 표현 계층 분리이며 백엔드 MSA가 아니다.
@@ -25,6 +26,8 @@ backend/
     spatial/            # 모델, Admin 좌표 입력, Nearby/상호작용 거리 selector
     encounters/         # Spawn Rule, 발급/Capture service, TTL/재사용, 결과 API/Admin
     collection/         # 획득 개체, 본인 목록, 조회 전용 Admin
+    community/          # 게시글·댓글·좋아요·신고·moderation
+    news/               # 수집·검수·발행, 동기 명령과 비동기 task
   tests/integration/
 frontend/
   Dockerfile / package.json / package-lock.json
@@ -81,9 +84,9 @@ TanStack Query는 클라이언트 재조회가, Zustand는 화면 간 클라이�
 
 ## 로컬과 후속 인프라
 
-Compose는 Web, API, PostgreSQL/PostGIS 세 개다. 소스 bind mount, DB named volume, 웹 node_modules/.next named volume으로 호스트 의존성을 분리한다. Python venv는 이미지 내부 `/opt/venv`다. 모든 외부 포트는 localhost에만 bind한다. 선택한 PostGIS 17/3.5 이미지는 amd64 전용이므로 Apple Silicon에서는 Docker Desktop 에뮬레이션을 사용한다.
+Compose는 Web, API, PostgreSQL/PostGIS, RabbitMQ, Worker 다섯 서비스다. 소스 bind mount, DB named volume, 웹 node_modules/.next named volume으로 호스트 의존성을 분리한다. Python venv는 이미지 내부 `/opt/venv`다. 모든 외부 포트는 localhost에만 bind한다. 선택한 PostGIS 17/3.5 이미지는 amd64 전용이므로 Apple Silicon에서는 Docker Desktop 에뮬레이션을 사용한다.
 
-Migration은 서버 부팅에 숨기지 않고 명령으로 적용한다. Redis는 TTL에, Celery/RabbitMQ는 아직 없는 작업에 미리 넣지 않는다. Encounter 만료는 DB 시간 비교로 해결한다. Crawler/알림/이미지 작업이 생기면 비동기를, 측정된 병목이 생기면 캐시를 도입한다. Object Storage는 업로드 시 S3를 우선 검토하고 현재는 asset_key만 저장한다.
+Migration은 서버 부팅에 숨기지 않고 명령으로 적용한다. Redis는 TTL을 위해 도입하지 않는다. Celery/RabbitMQ는 Phase 9 수집 실행에 사용한다. Encounter 만료는 DB 시간 비교로 해결한다. Crawler/알림/이미지 작업이 생기면 비동기를, 측정된 병목이 생기면 캐시를 도입한다. Object Storage는 업로드 시 S3를 우선 검토하고 현재는 asset_key만 저장한다.
 
 Kubernetes, Kafka, Unity/AR/3D, H3는 제외다. Prometheus/Grafana/OTel은 관측성 단계로 남긴다. production 설정은 안전한 기본값 초안이며 개발 Dockerfile·runserver를 운영 배포 구성으로 사용하지 않는다. 운영 WSGI/ASGI 서버, TLS proxy, 정적 파일/S3, 제한된 DB 역할은 Phase 14에서 결정한다.
 
@@ -96,3 +99,13 @@ Kubernetes, Kafka, Unity/AR/3D, H3는 제외다. Prometheus/Grafana/OTel은 관�
 
 
 Phase 6 Capture는 Encounter만 잠그고 성공 기록·Collection 생성을 명시적인 서비스 호출로 같은 트랜잭션에 묶는다. collection 서비스는 Encounter에서 소유자와 Variant를 결정한다. Capture 시 위치 재검증은 하지 않는다. Redis·추가 인프라·범용 Repository 없이 OneToOne 제약과 행 잠금으로 중복 지급을 막는다. Collection의 단순 목록은 generic view queryset과 select_related로 처리한다.
+
+## Phase 9 — 비동기 수집 실행 계층
+
+기존 API는 수집을 실행하지 않는다. 동기 collect_news 명령은 유지하고 enqueue_news_collection → RabbitMQ → 별도 Celery Worker → 동일 crawler.collect 함수 경로를 추가한다. task는 UUID만 받고 실행·재시도·안전한 로그를 담당한다. Parser/DB 로직을 task에 복제하지 않는다. 동일 Django 코드와 DB를 사용하는 Modular Monolith다.
+
+Celery 5.6.3과 RabbitMQ 4.3.6 기본 이미지(관리 UI 없음)를 사용한다. 단일 durable classic news.collect queue, persistent JSON 메시지, publisher confirm을 사용하며 pickle·result backend·Flower·Redis·Beat·Batch 모델은 없다. Worker는 별도 backend 컨테이너의 prefork/concurrency 1, prefetch 1이다. soft/hard 제한은 600/660초, 종료 유예는 700초다. RabbitMQ는 내부 포트와 전용 사용자/vhost, named volume을 사용한다. API readiness는 broker와 결합하지 않는다.
+
+DB commit 이후에만 on_commit으로 발행한다. commit과 publish 사이 crash 누락은 outbox 없이 보장할 수 없으며 수동 재실행 대상이다. late ACK를 사용하되 일반 실패와 개별 자식 프로세스 비정상 종료는 ACK하고 자동 requeue하지 않는다. Worker 전체 연결 소실로 재전달되면 기존 unique와 항목별 atomic으로 중복을 방지한다. 이미 커밋한 항목은 유지되고 진행 중인 항목만 rollback한다.
+
+RabbitMQ 4.3 호환을 위해 Celery control/event queue는 exclusive로 명시한다. 수집 작업 큐는 durable classic을 유지한다. [Celery 설정](https://docs.celeryq.dev/en/v5.6.3/userguide/configuration.html#control-queue-exclusive)

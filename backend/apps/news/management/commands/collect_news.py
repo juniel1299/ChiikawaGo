@@ -14,7 +14,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         try:
             source = Source.objects.get(code=options["source"])
-            counts = collect(source.pk)
+            counts = collect(source.pk).counts
         except (Source.DoesNotExist, CollectionError) as exc:
             raise CommandError("Source unavailable or collection policy check failed.") from exc
         self.stdout.write(" ".join(f"{key}={value}" for key, value in counts.items()))

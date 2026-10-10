@@ -98,3 +98,13 @@ def news_candidate(news_source, news_item):
     from apps.news import services
 
     return services.store_item(source_id=news_source.pk, item=news_item)[0]
+
+
+def pytest_collection_modifyitems(config, items):
+    import os
+
+    if os.environ.get("RUN_BROKER_TESTS") != "1":
+        skip = pytest.mark.skip(reason="RabbitMQ tests require RUN_BROKER_TESTS=1")
+        for item in items:
+            if "broker" in item.keywords:
+                item.add_marker(skip)

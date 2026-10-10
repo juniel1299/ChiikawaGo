@@ -1,6 +1,7 @@
 import os
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import quote
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
@@ -128,3 +129,54 @@ LOGGING = {
 }
 
 ENCOUNTER_TTL_SECONDS = 180
+
+# Broker connectivity is needed only when publishing or running a worker.
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL") or (
+    "amqp://"
+    + quote(os.environ.get("RABBITMQ_USER", ""), safe="")
+    + ":"
+    + quote(os.environ.get("RABBITMQ_PASSWORD", ""), safe="")
+    + "@"
+    + os.environ.get("RABBITMQ_HOST", "localhost")
+    + ":5672/"
+    + quote(os.environ.get("RABBITMQ_VHOST", "chii"), safe="")
+)
+CELERY_TASK_SERIALIZER = "json"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_RESULT_BACKEND = None
+CELERY_TASK_IGNORE_RESULT = True
+CELERY_TASK_STORE_ERRORS_EVEN_IF_IGNORED = False
+CELERY_TASK_DEFAULT_QUEUE = "news.collect"
+CELERY_TASK_DEFAULT_EXCHANGE = "news.collect"
+CELERY_TASK_DEFAULT_EXCHANGE_TYPE = "direct"
+CELERY_TASK_DEFAULT_ROUTING_KEY = "news.collect"
+CELERY_TASK_QUEUES = {
+    "news.collect": {
+        "exchange": "news.collect",
+        "routing_key": "news.collect",
+        "durable": True,
+        "queue_arguments": {"x-queue-type": "classic"},
+    },
+}
+CELERY_TASK_ROUTES = {"news.collect_news_source": {"queue": "news.collect"}}
+CELERY_TASK_CREATE_MISSING_QUEUES = False
+CELERY_TASK_DEFAULT_DELIVERY_MODE = "persistent"
+CELERY_BROKER_TRANSPORT_OPTIONS = {"confirm_publish": True}
+CELERY_BROKER_CONNECTION_TIMEOUT = 5
+CELERY_TASK_PUBLISH_RETRY = False
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_WORKER_HIJACK_ROOT_LOGGER = False
+CELERY_WORKER_SEND_TASK_EVENTS = True
+CELERY_TASK_SEND_SENT_EVENT = True
+CELERY_WORKER_CANCEL_LONG_RUNNING_TASKS_ON_CONNECTION_LOSS = True
+CELERY_TIMEZONE = "UTC"
+LOGGING["loggers"]["chii.tasks"] = {
+    "handlers": ["console"],
+    "level": "INFO",
+    "propagate": False,
+}
+
+# RabbitMQ 4.3 rejects non-durable, non-exclusive control/event queues.
+CELERY_CONTROL_QUEUE_EXCLUSIVE = True
+CELERY_EVENT_QUEUE_EXCLUSIVE = True

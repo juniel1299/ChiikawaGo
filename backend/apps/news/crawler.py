@@ -1,5 +1,7 @@
 """Synchronous, bounded fetches. No network I/O inside database transactions."""
 
+import socket
+import ssl
 import time
 from datetime import timedelta
 from urllib.error import HTTPError, URLError
@@ -12,6 +14,7 @@ from django.utils import timezone
 
 from .models import DREAMNEWS_LIST, Source
 from .parser import CollectionError, parse_detail, parse_listing, validate_url
+from .results import CollectionResult, TransientCollectionError
 from .services import require_source, store_item
 
 USER_AGENT = "ChiiWorldNewsBot/0.1 (+https://github.com/juniel1299/ChiikawaGo)"
@@ -74,7 +77,15 @@ def fetch(source_id, url, *, robots=None):
                 continue
             raise CollectionError(f"http_{status}") from None
         except (URLError, TimeoutError, OSError, UnicodeError) as exc:
-            raise CollectionError("fetch_failed") from exc
+            reason = exc.reason if isinstance(exc, URLError) else exc
+            if not isinstance(reason, ssl.SSLError):
+                if isinstance(reason, TimeoutError):
+                    raise TransientCollectionError("network_timeout") from None
+                if isinstance(reason, (ConnectionResetError, ConnectionRefusedError)):
+                    raise TransientCollectionError("network_connection") from None
+                if isinstance(reason, socket.gaierror) and reason.errno == socket.EAI_AGAIN:
+                    raise TransientCollectionError("network_dns_temporary") from None
+            raise CollectionError("fetch_failed") from None
     raise CollectionError("redirect_limit")
 
 
@@ -111,23 +122,38 @@ def parse_robots(text):
 
 
 def collect(source_id):
-    counts = {"created": 0, "skipped": 0, "failed": 0}
-    source = Source.objects.get(pk=source_id)
-    require_source(source)
+    result = CollectionResult()
+    stage = "source"
     try:
+        source = Source.objects.get(pk=source_id)
+        require_source(source)
+        stage = "robots"
         robots = parse_robots(fetch(source_id, ROBOTS_URL))
-        urls = parse_listing(fetch(source_id, DREAMNEWS_LIST, robots=robots))
-    except CollectionError:
-        counts["failed"] += 1
-        return counts
+        stage = "listing_fetch"
+        html = fetch(source_id, DREAMNEWS_LIST, robots=robots)
+        stage = "listing_parse"
+        urls = parse_listing(html)
+    except Source.DoesNotExist:
+        result.fail(CollectionError("source_missing"), stage)
+        return result
+    except CollectionError as exc:
+        result.fail(exc, stage)
+        return result
     for url in urls:
         try:
-            item = parse_detail(fetch(source_id, url, robots=robots), url)
+            stage = "detail_fetch"
+            html = fetch(source_id, url, robots=robots)
+            stage = "detail_parse"
+            item = parse_detail(html, url)
+            stage = "store"
             _, created = store_item(source_id=source_id, item=item)
-            counts["created" if created else "skipped"] += 1
+            if created:
+                result.created += 1
+            else:
+                result.skipped += 1
         except CollectionError as exc:
-            counts["failed"] += 1
+            result.fail(exc, stage)
             # Access failures stop this run; malformed individual articles do not.
             if str(exc).startswith(("http_", "access_", "robots_", "source_")):
                 break
-    return counts
+    return result

@@ -3,6 +3,7 @@ name = "chii-world-api"
 version = "0.1.0"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+  "celery==5.6.3",
   "Django==5.2.17",
   "djangorestframework==3.18.1",
   "djangorestframework-simplejwt==5.5.1",
@@ -17,6 +18,7 @@ dev = ["pytest==9.1.1", "pytest-django==4.14.0", "ruff==0.16.10"]
 DJANGO_SETTINGS_MODULE = "config.settings.test"
 pythonpath = ["."]
 testpaths = ["tests", "apps"]
+markers = ["broker: requires explicit RUN_BROKER_TESTS=1 and RabbitMQ"]
 
 [tool.ruff]
 target-version = "py313"

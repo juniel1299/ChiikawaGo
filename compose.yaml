@@ -18,12 +18,17 @@ services:
       timeout: 5s
       retries: 20
   api:
+    image: chii-world-api
     build: ./backend
-    environment:
+    environment: &backend_environment
       DJANGO_SETTINGS_MODULE: config.settings.local
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Copy .env.example to .env}
       JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:?Copy .env.example to .env}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,api}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER:?Set RabbitMQ credentials}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RabbitMQ credentials}
+      RABBITMQ_VHOST: chii
       POSTGRES_HOST: db
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -40,6 +45,39 @@ services:
       interval: 10s
       timeout: 6s
       retries: 10
+  rabbitmq:
+    image: rabbitmq:4.3.6@sha256:42b190dffdd0cdb656f989f5404c30e1049d6b7d9c987089669b1905e5e3a1a6
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?Set RabbitMQ credentials}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Set RabbitMQ credentials}
+      RABBITMQ_DEFAULT_VHOST: chii
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping && rabbitmq-diagnostics -q check_port_connectivity"]
+      interval: 10s
+      timeout: 8s
+      retries: 12
+  worker:
+    image: chii-world-api
+    build: ./backend
+    environment: *backend_environment
+    volumes:
+      - ./backend:/app
+    command: ["celery", "-A", "config", "worker", "--loglevel=INFO", "--pool=prefork", "--concurrency=1", "--queues=news.collect", "--hostname=crawler@%h"]
+    stop_grace_period: 700s
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping --destination crawler@$$HOSTNAME --timeout=5"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
   web:
     build: ./frontend
     environment:
@@ -63,5 +101,6 @@ services:
       retries: 10
 volumes:
   postgres_data:
+  rabbitmq_data:
   web_modules:
   web_next:

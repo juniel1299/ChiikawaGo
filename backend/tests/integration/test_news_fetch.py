@@ -81,7 +81,10 @@ def test_fetch_errors_safe(news_source, monkeypatch, error):
     opener = Mock()
     opener.open.side_effect = error
     monkeypatch.setattr(crawler, "build_opener", lambda *args: opener)
-    with pytest.raises(CollectionError, match="^fetch_failed$"):
+    with pytest.raises(
+        CollectionError,
+        match="^network_timeout$" if isinstance(error, TimeoutError) else "^fetch_failed$",
+    ):
         crawler.fetch(news_source.pk, URL)
 
 
