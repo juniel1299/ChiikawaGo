@@ -117,3 +117,10 @@ Next.js `/batch` → 허용된 BFF Route Handler → Django Batch API → Postgr
 별도 `run_batch_scheduler` 프로세스는 5초마다 DB의 due Schedule과 발행 대기를 확인한다. Compose의 scheduler profile을 명시적으로 켠다. 로컬과 운영 모두 DB Cron을 사용하므로 LOCAL_SCHEDULER_ENABLED나 코드 Cron은 없다. 최근 정상 tick 파일로 health를 확인한다. RabbitMQ 장애는 기존 API readiness와 결합하지 않는다.
 
 Execution을 전달 의도로 사용해 on_commit 누락을 복구한다. 별도 outbox/beat/result backend는 없다. croniter 6.2.4만 추가해 Cron 날짜/윤년/이전·다음 계산을 재사용한다. DST 지역·다중 Schedule·Source 병렬 실행·이력 자동 정리·자동 장애 판정은 후속이다.
+
+
+## Phase 11 — Redis 도입 판단 완료
+
+**C — Redis adoption deferred after measurement**로 확정했다. [로컬 baseline 보고서](../benchmarks/redis-evaluation/REPORT.md)의 PostGIS/count/JIT 및 Docker 자원 제약을 먼저 검토한다. 운영 capacity나 실제 cache hit rate를 검증한 결과는 아니다. Redis dependency·service·cache backend를 추가하지 않는다.
+
+Batch 잠금은 PostgreSQL, Celery broker는 RabbitMQ, 실행 상태는 BatchExecution, JWT blacklist와 Django session은 기존 저장 구조를 유지한다. 로그인/공개 API rate limiting은 별도 abuse protection 요구이며 proxy/gateway와 향후 다중 인스턴스 요구를 기준으로 검토한다. 성능 최적화 추가 구현은 이번 결정에 포함하지 않는다.

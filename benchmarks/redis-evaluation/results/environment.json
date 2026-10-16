@@ -1,0 +1,24 @@
+{
+  "host_system": "Darwin",
+  "host_machine": "arm64",
+  "python": "3.13.2",
+  "commit": "f9363d265e46afef6233efe994e57507c3116330",
+  "docker": {
+    "architecture": "aarch64",
+    "cpus": 12,
+    "memory": 8217686016
+  },
+  "limits": {
+    "api_cpu": 2,
+    "db_cpu": 2,
+    "api_memory_gib": 2,
+    "db_memory_gib": 2
+  },
+  "seed": 20261016,
+  "note": "Local runserver; amd64 PostGIS emulated on arm64; not production capacity",
+  "hardware": "Apple M4 Pro",
+  "images": {
+    "api": "sha256:6f70f24c6c26cbcc327beacf58a8c30540c906e6f56eefcaa8a57850a6b2c5b9",
+    "db": "sha256:01a6a70e41e6c4467c8f55f6063555ed72db2d6662cd0d571040d42eadaeb6f6"
+  }
+}

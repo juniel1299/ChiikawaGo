@@ -261,3 +261,19 @@ RUNNING의 hard limit+120초 경과는 경고일 뿐이다. Worker의 실제 종
 - 추적 파일에서 .env·개인 경로·개인키/토큰 패턴과 불필요한 생성물을 확인하지 못했다. Phase 10 변경은 feat/batch-platform에 **미커밋**으로 남긴다.
 
 완료 범위는 DB 일정/원장/전달 복구와 최소 운영 화면이다. 자동 장애 판정, exactly-once 업무 수행, DST 시간대, 다중 Schedule/Source 병렬 실행, 실행 이력 자동 삭제는 구현하지 않았다. 동기 수집 명령에는 Celery 프로세스 시간 제한이 적용되지 않으며 기존 HTTP timeout과 원장/실행 중복 제한을 사용한다. 주기적 일정과 발행 유실 복구를 사용하려면 scheduler profile을 실행해야 한다.
+
+
+## 2026-10-17 Phase 11 — Redis 필요성 측정 및 판단
+
+Phase 10 commit `f9363d26`의 [원격 GitHub Actions](https://github.com/juniel1299/ChiikawaGo/actions/runs/38093395798) 성공을 확인하고 `perf/redis-evaluation`에서 측정했다. Phase 11은 Redis 구현 단계가 아니라 필요성 측정 단계로 정의한다.
+
+결론은 **C: Redis adoption deferred after measurement**다. [측정 보고서](../benchmarks/redis-evaluation/REPORT.md), [전체 결과표](../benchmarks/redis-evaluation/RESULTS.md), [재현 방법](../benchmarks/redis-evaluation/README.md)에 seed·데이터 규모·부하 조건·raw 결과·실행계획을 기록했다. runserver/Apple Silicon/에뮬레이션 PostGIS의 상대 비교 결과이며 운영 capacity 또는 확정 SLO로 사용하지 않는다.
+
+10x 밀집 Nearby는 3 req/s에서 오류 없이 처리했지만 5 req/s에서 CPU 포화와 64 MiB 공유 메모리 제약이 나타났다. 넓은 반경은 baseline → JIT off → 원복의 단일 변경 실험으로 p95 약 771 → 316 → 812ms를 확인했다. Redis 이전에 운영 서버/native DB·공유 메모리·쿼리/count 비용을 검증할 근거다. 로그인 burst 270건은 모두 401이었고 제한 응답은 없으므로 공개 운영 전 rate limiting 정책 검토는 별도로 필요하다.
+
+Redis dependency, Compose 서비스, cache backend를 추가하지 않았다. Batch locking/PostgreSQL, Celery/RabbitMQ, BatchExecution, JWT blacklist와 Django session을 유지한다. JIT는 기본값으로 원복했다. 서비스 코드·API 계약·기존 migration 변경은 없다. 운영 환경 검증, 실제 재사용률·최신성 요구, proxy/gateway 및 필요 시 분산 limiter 비교는 후속 고려사항이다.
+
+
+Phase 11 최종 승인: **C — Redis adoption deferred after measurement**. Nearby의 PostGIS/count/DB 자원 비용, JIT 단일 변경의 영향, 로컬 shared-memory 오류를 Redis 필요성으로 혼동하지 않는다. Character/News 캐시의 필수성은 확인되지 않았으며 synthetic 재사용률은 실제 사용자 hit rate가 아니다. Rate limiting은 별도의 abuse protection 요구로 유지한다.
+
+체크포인트에는 benchmark 스크립트·README/REPORT/RESULTS와 소규모 집계·환경·검증 기록만 포함한다. 요청별 raw, 상세 실행계획, pilot, 생성 차트·raw 해시 manifest는 로컬에 보존하고 Git에서 제외한다. fresh checkout의 집계만으로 과거 raw를 재검증할 수는 없으며 재현 절차로 새 raw를 생성한다. Phase 12 Flutter/GPS/Map은 다음 설계 단계이며 이 체크포인트에서 구현하지 않는다.

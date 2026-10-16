@@ -1,0 +1,8 @@
+# Local measurements and generated visualizations are reproducible, not source artifacts.
+/results/*
+!/results/summary.json
+!/results/summary.csv
+!/results/validation.json
+!/results/environment.json
+!/results/resumed-environment.json
+!/results/overload-diagnosis.json
