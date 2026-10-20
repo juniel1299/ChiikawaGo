@@ -1,3 +1,4 @@
+perf/redis-evaluation
 .env
 .env.*
 !.env.example
@@ -49,3 +50,4 @@ mobile/ios/build/
 
 # macOS
 .DS_Store
+PROMPT.md
