@@ -277,3 +277,30 @@ Redis dependency, Compose 서비스, cache backend를 추가하지 않았다. Ba
 Phase 11 최종 승인: **C — Redis adoption deferred after measurement**. Nearby의 PostGIS/count/DB 자원 비용, JIT 단일 변경의 영향, 로컬 shared-memory 오류를 Redis 필요성으로 혼동하지 않는다. Character/News 캐시의 필수성은 확인되지 않았으며 synthetic 재사용률은 실제 사용자 hit rate가 아니다. Rate limiting은 별도의 abuse protection 요구로 유지한다.
 
 체크포인트에는 benchmark 스크립트·README/REPORT/RESULTS와 소규모 집계·환경·검증 기록만 포함한다. 요청별 raw, 상세 실행계획, pilot, 생성 차트·raw 해시 manifest는 로컬에 보존하고 Git에서 제외한다. fresh checkout의 집계만으로 과거 raw를 재검증할 수는 없으며 재현 절차로 새 raw를 생성한다. Phase 12 Flutter/GPS/Map은 다음 설계 단계이며 이 체크포인트에서 구현하지 않는다.
+
+
+## Phase 12 — Flutter 구현 / 검증 중
+
+`feat/flutter-mvp`에서 Android/iOS용 `mobile/`을 추가한다. Flutter stable 3.47.7 / Dart 3.13.5와 pubspec.lock을 고정하고 flutter_riverpod(코드 생성 없음), Dio, flutter_secure_storage, geolocator, google_maps_flutter를 사용한다. 인증·위치·Nearby·지도·Encounter·Capture·Collection만 구현한다.
+
+기존 Backend API와 모델은 변경하지 않는다. Access는 메모리, Refresh는 secure storage, 동시 갱신은 단일 실행이며 원 요청 retry는 한 번이다. Logout과 refresh/login을 직렬화하고 계정별 화면 상태를 제거한다. 위치는 foreground 단발 조회이며 권한 거부/제한·대략적 위치·서비스 중단·timeout·복귀를 처리한다. Nearby는 명시적 조회, 고정 좌표 pagination 및 늦은 응답 무시를 적용한다. Encounter 직전에 새 GPS를 확보하고 Capture는 위치 없이 같은 ID로 재시도한다.
+
+[모바일 실행·검증 안내](../mobile/README.md)에 환경, 키 제한, 자동 테스트와 실기기 acceptance를 구분한다. **실기기 및 iOS 빌드 미검증이므로 Phase 12 전체 완료로 표시하지 않는다.** Redis·background location·Push·Community/News/Batch UI·이미지 인프라·3D/AR/Unity는 추가하지 않는다. Phase 11 성능 결론은 유지하고 추가 최적화하지 않는다. 사용자 요청에 따라 검증 결과를 먼저 보고하며 commit/push하지 않는다.
+
+
+### 2026-10-17 Phase 12 로컬 검증
+
+- Flutter stable 3.47.7 / Dart 3.13.5, Android compile/target SDK 36, min SDK 24, Java 17.0.13, Gradle 9.3.1, NDK 28.2.13676358. Doctor의 Flutter/Android 항목 통과. Xcode는 전체 설치가 없어 실패이며 iOS 빌드 미검증.
+- Unit 35개 + Widget 3개 통과, 정적 분석·format 통과, Android debug APK 빌드 통과. 지도 키 없이 목록 대체 UI로 컴파일했다.
+- 별도 실제 Django/PostGIS에서 Flutter 컨트롤러의 로그인 → Nearby → Encounter → 반복 Capture → Collection → Refresh 복원 → 로그아웃 통합 테스트 1개 통과. GPS·보안 저장소는 대역이며 네이티브 실기기 검증을 대신하지 않는다. 테스트 전용 DB/컨테이너는 정리했다.
+- Android 실기기 미연결, iOS 실기기/전체 Xcode 없음, Google Maps 키 미제공으로 실제 지도·플랫폼 보안 저장소·위치 권한 UX는 미검증. 실제 API key 제한과 배포 signing도 아직 적용·검증되지 않았다.
+- 모바일 CI workflow를 추가했지만 commit/push 및 원격 실행은 하지 않았다. Backend/Frontend/기존 Compose·API·모델 변경 없음. 실기기 acceptance 통과 전 Phase 12 전체 완료로 확정하지 않는다.
+
+### 2026-10-20 Phase 12 자동 검증 재실행
+
+- 고정 Flutter 3.47.7 / Dart 3.13.5, Android SDK 36 / Java 17.0.13을 재확인했다. 의존성 lock 검증, analyzer, 전체 Dart format, Unit 35개 + Widget 3개, Android debug APK 빌드가 통과했다.
+- 별도 Django/PostGIS HTTP 통합 테스트 1개가 통과했고 테스트 컨테이너를 정리했다. 일반 테스트의 해당 1개 skip은 별도 실행을 위한 의도된 설정이다.
+- 전체 Xcode 미설치로 iOS build/Simulator를 실행할 수 없고 Android 실기기도 미연결이다. 사용자는 자동 검증 후 실기기를 미검증으로 남기도록 선택했다. Android emulator도 이번에 실행하지 않았다.
+- 지도 키 파일이 없어 실제 Google Maps와 플랫폼 키 제한은 미검증이다. 실제 GPS/권한 UX/Keychain·secure storage/플랫폼 전체 흐름도 실기기 검증을 대신하는 것으로 간주하지 않는다.
+- Gradle의 `mobile/android/build/` 보고서가 Git 후보에 들어오는 문제를 ignore 항목으로 수정했다. 앱 기능·Backend·패키지 변경은 없다. 민감정보 패턴과 생성물 점검 결과 및 한계는 [모바일 검증 기록](../mobile/README.md)에 남겼다.
+- 상태: **IMPLEMENTATION COMPLETE / DEVICE VALIDATION PENDING**. commit/push 및 원격 CI 실행은 하지 않았다.

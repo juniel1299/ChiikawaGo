@@ -124,3 +124,10 @@ Execution을 전달 의도로 사용해 on_commit 누락을 복구한다. 별도
 **C — Redis adoption deferred after measurement**로 확정했다. [로컬 baseline 보고서](../benchmarks/redis-evaluation/REPORT.md)의 PostGIS/count/JIT 및 Docker 자원 제약을 먼저 검토한다. 운영 capacity나 실제 cache hit rate를 검증한 결과는 아니다. Redis dependency·service·cache backend를 추가하지 않는다.
 
 Batch 잠금은 PostgreSQL, Celery broker는 RabbitMQ, 실행 상태는 BatchExecution, JWT blacklist와 Django session은 기존 저장 구조를 유지한다. 로그인/공개 API rate limiting은 별도 abuse protection 요구이며 proxy/gateway와 향후 다중 인스턴스 요구를 기준으로 검토한다. 성능 최적화 추가 구현은 이번 결정에 포함하지 않는다.
+
+
+## Phase 12 — 모바일 클라이언트 (실기기 검증 대기)
+
+Flutter Android/iOS가 기존 Django API에 Bearer JWT로 직접 연결한다. Next.js 쿠키/BFF를 경유하지 않는다. Riverpod가 의존성 수명과 인증 상태를 관리하며 기능 controller는 사용자 세션에 종속한다. 토큰 저장·위치·HTTP만 테스트 대체 경계로 둔다. Refresh Token은 플랫폼 secure storage, Access Token은 메모리에 유지한다. API 계약·Modular Monolith·DB 트랜잭션은 그대로다.
+
+Google Maps는 플랫폼별 제한된 API key를 로컬/배포 설정에서 주입하며 Git에 저장하지 않는다. Foreground 단발 GPS와 명시적 Nearby 갱신만 사용하고 사용자 정밀 좌표는 로그·영구 저장소에 기록하지 않는다. 지도와 GPS를 대체하는 자동 테스트와 실제 기기 검증은 별도 완료 항목이다. MapLibre/flutter_map 전환은 Future Consideration이다.
