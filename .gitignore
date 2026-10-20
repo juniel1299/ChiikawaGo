@@ -14,3 +14,38 @@
 **/*.tsbuildinfo
 backend/staticfiles/
 .DS_Store
+# Flutter / Dart
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.packages
+mobile/.pub-cache/
+mobile/build/
+
+# Android
+mobile/android/.gradle/
+mobile/android/app/build/
+mobile/android/build/
+*.apk
+*.aab
+
+# iOS / CocoaPods / Xcode
+mobile/ios/Pods/
+mobile/ios/.symlinks/
+mobile/ios/Flutter/ephemeral/
+mobile/ios/build/
+*.ipa
+
+# Xcode user / derived files
+**/DerivedData/
+**/*.xcuserstate
+**/xcuserdata/
+**/*.xcworkspace/xcuserdata/
+
+# Local / secrets
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
