@@ -1,0 +1,34 @@
+name: Mobile
+on:
+  push:
+    paths: ['mobile/**', 'backend/**', '.github/workflows/mobile.yml']
+  pull_request:
+    paths: ['mobile/**', 'backend/**', '.github/workflows/mobile.yml']
+permissions:
+  contents: read
+jobs:
+  android-and-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Install pinned Flutter SDK
+        run: |
+          git clone --depth 1 --branch 3.47.7 https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          test "$(git -C "$RUNNER_TEMP/flutter" rev-parse HEAD)" = abaf9c523780a608bd46686fd5e53740a07077f8
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/flutter/bin/flutter" --disable-analytics
+      - name: Resolve locked packages and check
+        working-directory: mobile
+        run: |
+          flutter pub get --enforce-lockfile
+          dart format --output=none --set-exit-if-changed lib test
+          flutter analyze
+          flutter test
+      - name: Android debug build (map key not needed)
+        working-directory: mobile
+        run: flutter build apk --debug
+      - name: Real Django PostGIS contract flow (no GPS or map network)
+        run: |
+          docker build -t chii-world-api backend
+          python3 mobile/tool/run_backend_integration.py

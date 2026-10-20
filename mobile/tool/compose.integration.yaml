@@ -1,0 +1,33 @@
+name: chii-mobile-test
+services:
+  db:
+    image: postgis/postgis:17-3.5@sha256:01a6a70e41e6c4467c8f55f6063555ed72db2d6662cd0d571040d42eadaeb6f6
+    platform: linux/amd64
+    environment:
+      POSTGRES_DB: chii_mobile_test
+      POSTGRES_USER: mobile_test
+      POSTGRES_PASSWORD: isolated-test-only
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U mobile_test -d chii_mobile_test']
+      interval: 2s
+      retries: 30
+  api:
+    image: chii-world-api
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.local
+      DJANGO_SECRET_KEY: isolated-mobile-test-only
+      JWT_SIGNING_KEY: isolated-mobile-test-jwt-only
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+      POSTGRES_HOST: db
+      POSTGRES_DB: chii_mobile_test
+      POSTGRES_USER: mobile_test
+      POSTGRES_PASSWORD: isolated-test-only
+      CHII_TEST_PASSWORD: ${CHII_TEST_PASSWORD:?test runner supplies this}
+    volumes:
+      - ../../backend:/app:ro
+      - .:/mobile-tool:ro
+    ports: ['127.0.0.1:18081:8000']
+    depends_on:
+      db:
+        condition: service_healthy
+    command: [python, manage.py, runserver, '0.0.0.0:8000', --noreload]

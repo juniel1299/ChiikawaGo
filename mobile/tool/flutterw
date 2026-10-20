@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+flutter_bin="${FLUTTER_BIN:-flutter}"
+"$flutter_bin" --version --machine | python3 -c 'import json,sys; v=json.load(sys.stdin); assert v["frameworkVersion"] == "3.47.7" and v["dartSdkVersion"].split()[0] == "3.13.5", "Use the pinned Flutter 3.47.7 / Dart 3.13.5 SDK"'
+export BYPASS_PERMISSION_LOCATION_ALWAYS=1
+exec "$flutter_bin" "$@"
