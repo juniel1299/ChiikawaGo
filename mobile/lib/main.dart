@@ -8,6 +8,7 @@ import 'core/api.dart';
 import 'core/session.dart';
 import 'core/location.dart';
 import 'features/flows.dart';
+import 'features/signup_screen.dart';
 
 const apiUrl = String.fromEnvironment(
   'API_BASE_URL',
@@ -173,7 +174,28 @@ class _LoginState extends State<Login> {
               onPressed: widget.session.busy ? null : submit,
               child: Text(widget.session.busy ? '확인 중…' : '로그인'),
             ),
-            const Text('기존 계정으로 로그인해 주세요. 위치 권한은 주변 탐색을 사용할 때 요청합니다.'),
+            TextButton(
+              onPressed: widget.session.busy
+                  ? null
+                  : () async {
+                      password.clear();
+                      final registeredEmail = await Navigator.push<String>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => SignupScreen(api: widget.session.api),
+                        ),
+                      );
+                      if (!mounted) return;
+                      if (registeredEmail != null) {
+                        setState(() {
+                          email.text = registeredEmail;
+                          error = null;
+                        });
+                      }
+                    },
+              child: const Text('회원가입'),
+            ),
+            const Text('위치 권한은 주변 탐색을 사용할 때 요청합니다.'),
           ],
         ),
       ),

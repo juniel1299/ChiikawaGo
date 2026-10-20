@@ -304,3 +304,17 @@ Phase 11 최종 승인: **C — Redis adoption deferred after measurement**. Nea
 - 지도 키 파일이 없어 실제 Google Maps와 플랫폼 키 제한은 미검증이다. 실제 GPS/권한 UX/Keychain·secure storage/플랫폼 전체 흐름도 실기기 검증을 대신하는 것으로 간주하지 않는다.
 - Gradle의 `mobile/android/build/` 보고서가 Git 후보에 들어오는 문제를 ignore 항목으로 수정했다. 앱 기능·Backend·패키지 변경은 없다. 민감정보 패턴과 생성물 점검 결과 및 한계는 [모바일 검증 기록](../mobile/README.md)에 남겼다.
 - 상태: **IMPLEMENTATION COMPLETE / DEVICE VALIDATION PENDING**. commit/push 및 원격 CI 실행은 하지 않았다.
+
+### Phase 12.5 — 모바일 회원가입 보완 (2026-10-20)
+
+사용자가 기존 실제 iPhone의 Login → Location → Nearby → Map → Encounter → Capture → Collection 및 GPS/권한/인증 검증 성공을 확인했다. 이는 사용자 확인 결과이며, 이번 신규 회원가입 실기기 결과와 구분한다. Android 실기기는 계속 UNVERIFIED다.
+
+기존 `POST /api/v1/auth/register`의 email/password/display_name 계약으로 모바일 가입 화면을 추가했다. confirmation은 화면에서만 비교한다. 성공 후 JWT 발급 없이 이메일을 채운 Login으로 돌아간다. 표시 이름은 기존 Backend 필수 필드다. 가입 중 중복 제출·자동 retry를 막고, 400 필드/공통 오류와 네트워크 결과 불확실 안내를 제공한다. 비밀번호는 요청 이후 입력을 비우고 저장하지 않는다. 기존 Session/Refresh/Logout 구현 및 Backend API·모델·migration은 변경하지 않는다.
+
+검증: Unit 48 + Widget 6 = 54개, 별도 실제 Django/PostGIS 통합 2개, analyzer/format, Android debug APK, Xcode 27.1의 iOS Simulator debug build 통과. 기존 Google Maps iOS 플러그인의 CocoaPods fallback 파일/lock을 빌드 도구가 생성했으며 새 dependency는 추가하지 않았다. 두 HTTP 테스트는 일반 실행에서 의도적으로 skip하고 격리 DB에서 별도 실행했다. 새 회원가입의 iPhone 실기기 Sign Up → Login → restore → logout 및 기존 수집 흐름 재검증은 아직 대기다. 실기기 완료로 추정하지 않으며 commit/push하지 않는다.
+
+2026-10-21 사용자 선택: 이번 보완의 iPhone 실기기 회원가입 및 회귀 검증은 대기로 남긴다. 자동 검증 통과를 실기기 완료로 대체하지 않는다. Phase 12 최종 체크포인트 commit/push는 수행하지 않았다.
+
+### 2026-10-21 Phase 12 최종 판정 — COMPLETE
+
+사용자가 실제 iPhone에서 신규 Sign Up → 이메일이 채워진 Login → Login → 앱 종료/재실행 Session restore → Logout과 Nearby → Encounter → Capture → Collection 회귀 성공을 확인했다. 자동 검증 54개(Unit 48/Widget 6), 격리 Django/PostGIS 통합 2개, analyzer/format, Android debug 및 iOS Simulator build 통과 결과와 함께 Phase 12/12.5 MVP를 COMPLETE로 판정한다. 실기기 근거는 사용자 확인이며 Android 실기기는 계속 UNVERIFIED다. Android 실기기 검증 및 배포 준비 완료를 의미하지 않는다. Phase 13은 별도 계획 승인 후 구현한다.

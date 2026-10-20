@@ -1,10 +1,16 @@
 import 'package:dio/dio.dart';
 
 class ApiFailure implements Exception {
-  const ApiFailure(this.message, {this.status, this.reason});
+  const ApiFailure(
+    this.message, {
+    this.status,
+    this.reason,
+    this.fields = const {},
+  });
   final String message;
   final int? status;
   final String? reason;
+  final Map<String, String> fields;
   @override
   String toString() => message; // Never expose Dio request options or bodies.
 }
@@ -59,6 +65,44 @@ class Api {
           reason = details['reason'];
         }
       }
+      // Only registration validation details are displayed, never retained request data.
+      final fields = <String, String>{};
+      if (path == '/auth/register' &&
+          status == 400 &&
+          body is Map &&
+          body['error'] is Map &&
+          body['error']['code'] == 'validation_error') {
+        final details = body['error']['details'];
+        String? safeText(Object? value) {
+          final values = value is List ? value : [value];
+          var text = values.whereType<String>().take(4).join(' ');
+          if (data is Map &&
+              data['password'] is String &&
+              (data['password'] as String).isNotEmpty) {
+            text = text.replaceAll(data['password'] as String, '[비공개]');
+          }
+          return text.isEmpty
+              ? null
+              : text.substring(0, text.length.clamp(0, 600));
+        }
+
+        if (details is Map) {
+          for (final key in [
+            'email',
+            'password',
+            'display_name',
+            'non_field_errors',
+            'detail',
+          ]) {
+            final text = safeText(details[key]);
+            if (text != null) fields[key] = text;
+          }
+        }
+        if (fields.isEmpty) {
+          final text = safeText(body['error']['message']);
+          if (text != null) fields['non_field_errors'] = text;
+        }
+      }
       throw ApiFailure(
         switch (status) {
           400 => '입력 내용을 확인해 주세요.',
@@ -76,6 +120,7 @@ class Api {
         },
         status: status,
         reason: reason,
+        fields: fields,
       );
     }
   }

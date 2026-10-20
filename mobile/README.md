@@ -191,3 +191,44 @@ was added for routing, model generation, logging, image hosting or caching.
 - No commit/push or remote CI run was performed.
 
 Status: **IMPLEMENTATION COMPLETE / DEVICE VALIDATION PENDING**.
+
+## Phase 12.5 — mobile registration
+
+Login now opens a screen-scoped registration form. It calls the unchanged
+`POST /api/v1/auth/register` with `email`, `display_name`, and `password`.
+Password confirmation is local validation only and is never sent to the server.
+Success returns to Login with the normalized email and a confirmation message;
+registration neither issues JWTs nor writes secure storage.
+
+The form checks required values, basic email syntax, name/email/password lengths
+and confirmation. Django remains authoritative for duplicate email, password
+similarity/common-password/numeric checks and all field validation. Only the
+registration 400 validation envelope is displayed as field/common errors;
+unexpected/server/network failures use fixed safe messages. Passwords are cleared
+after submit and disposed with the screen, never saved or logged. Requests are
+single-flight with no automatic registration retry. After an uncertain network
+outcome users can log in or retry manually; duplicate errors offer the Login route.
+
+2026-10-20 verification:
+- 48 unit + 6 widget tests passed (54 total); the two HTTP tests intentionally skip
+  in the ordinary suite and both passed separately against isolated Django/PostGIS.
+- HTTP tests cover signup/login/me/restore/logout, duplicate signup, and the existing
+  Nearby/Encounter/repeated Capture/Collection flow.
+- Analyzer, Dart format, Android debug build and iOS Simulator debug build passed.
+- Xcode 27.1 built the pinned existing plugins. Flutter generated CocoaPods fallback
+  configuration and Podfile.lock because the existing Google Maps iOS plugin does
+  not support Swift Package Manager. No package version or Backend change was made.
+- The user reports the pre-registration iPhone Login/Location/Nearby/Map/Encounter/
+  Capture/Collection flow passed, including GPS and permissions. This is user-reported
+  physical evidence, separate from automated checks.
+- New registration on physical iPhone and Android remains pending until verified;
+  Simulator compilation and Dart HTTP tests do not establish native secure-storage
+  or permission behavior. No commit/push was performed.
+
+2026-10-21: The user explicitly deferred physical-device verification of the new
+registration flow. Implementation and automated validation are complete; physical
+registration/regression acceptance remains pending. No commit/push performed.
+
+## Final acceptance — 2026-10-21
+
+**Phase 12/12.5 MVP: COMPLETE.** The user confirmed physical iPhone signup, email-prefilled Login, login, restart/session restore, logout and Nearby/Encounter/Capture/Collection regression. Combined with the recorded automated checks, this closes the MVP acceptance. Physical evidence is user-reported. Android physical validation remains UNVERIFIED; this is not a production-release readiness claim. Earlier pending entries are historical and superseded by this acceptance.

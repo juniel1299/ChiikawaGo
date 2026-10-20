@@ -8,7 +8,41 @@ import 'package:chii_mobile/features/flows.dart';
 
 import 'support.dart';
 
+import 'package:chii_mobile/features/signup.dart';
+
 void main() {
+  test('real signup → login → me → restore → logout', () async {
+    final api = Api('http://127.0.0.1:18081/api/v1');
+    final password = Platform.environment['CHII_TEST_PASSWORD']!;
+    final signup = Signup(api);
+    final email = await signup.submit(
+      email: 'signup@example.com',
+      displayName: 'New mobile',
+      password: password,
+      confirmation: password,
+    );
+    expect(email, 'signup@example.com');
+    final store = MemoryStore();
+    final session = Session(api, store);
+    await session.login(email!, password);
+    expect(session.user!['email'], email);
+    expect(session.user!['display_name'], 'New mobile');
+    expect(
+      await signup.submit(
+        email: email,
+        displayName: 'New mobile',
+        password: password,
+        confirmation: password,
+      ),
+      isNull,
+    );
+    expect(signup.errors['email'], contains('이미 사용'));
+    final restored = Session(api, store);
+    await restored.restore();
+    expect(restored.authenticated, true);
+    expect(await restored.logout(), true);
+    expect(store.value, isNull);
+  }, skip: Platform.environment['CHII_BACKEND_INTEGRATION'] != '1');
   test(
     'real Django/PostGIS login → Nearby → Encounter → Capture → Collection',
     () async {
