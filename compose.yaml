@@ -1,0 +1,124 @@
+name: chii-world
+services:
+  db:
+    image: postgis/postgis:17-3.5@sha256:01a6a70e41e6c4467c8f55f6063555ed72db2d6662cd0d571040d42eadaeb6f6
+    # This upstream image is amd64-only; Docker Desktop emulates it on Apple Silicon.
+    platform: linux/amd64
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Copy .env.example to .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Copy .env.example to .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Copy .env.example to .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  api:
+    image: chii-world-api
+    build: ./backend
+    environment: &backend_environment
+      DJANGO_SETTINGS_MODULE: config.settings.local
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Copy .env.example to .env}
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:?Copy .env.example to .env}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,api}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER:?Set RabbitMQ credentials}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RabbitMQ credentials}
+      RABBITMQ_VHOST: chii
+      POSTGRES_HOST: db
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./backend:/app
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 10
+  rabbitmq:
+    image: rabbitmq:4.3.6@sha256:42b190dffdd0cdb656f989f5404c30e1049d6b7d9c987089669b1905e5e3a1a6
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?Set RabbitMQ credentials}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Set RabbitMQ credentials}
+      RABBITMQ_DEFAULT_VHOST: chii
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping && rabbitmq-diagnostics -q check_port_connectivity"]
+      interval: 10s
+      timeout: 8s
+      retries: 12
+  worker:
+    image: chii-world-api
+    build: ./backend
+    environment: *backend_environment
+    volumes:
+      - ./backend:/app
+    command: ["celery", "-A", "config", "worker", "--loglevel=INFO", "--pool=prefork", "--concurrency=1", "--queues=batch.execute", "--hostname=crawler@%h"]
+    stop_grace_period: 700s
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping --destination crawler@$$HOSTNAME --timeout=5"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+  scheduler:
+    image: chii-world-api
+    build: ./backend
+    profiles: [scheduler]
+    environment: *backend_environment
+    volumes:
+      - ./backend:/app
+    command: ["python", "manage.py", "run_batch_scheduler"]
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,time; assert time.time()-os.path.getmtime('/tmp/batch-scheduler-heartbeat') < 30"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+  web:
+    build: ./frontend
+    environment:
+      API_INTERNAL_URL: http://api:8000
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      AUTH_COOKIE_SECURE: "false"
+      NEXT_TELEMETRY_DISABLED: "1"
+    volumes:
+      - ./frontend:/app
+      - web_modules:/app/node_modules
+      - web_next:/app/.next
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 6s
+      retries: 10
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  web_modules:
+  web_next:

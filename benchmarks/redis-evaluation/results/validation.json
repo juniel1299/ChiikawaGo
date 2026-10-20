@@ -1,0 +1,36 @@
+{
+  "baseline-1x": {
+    "trials": 48,
+    "requests": 5017,
+    "non_200": 0
+  },
+  "baseline-10x": {
+    "trials": 48,
+    "requests": 4610,
+    "non_200": 0
+  },
+  "jit-off-10x": {
+    "trials": 18,
+    "requests": 855,
+    "non_200": 0
+  },
+  "jit-restored-10x": {
+    "trials": 6,
+    "requests": 65,
+    "non_200": 0
+  },
+  "fixed-arrival-10x": {
+    "trials": 9,
+    "requests": 810,
+    "non_200": 378
+  },
+  "concurrency-confirmation-10x": {
+    "trials": 18,
+    "requests": 1986,
+    "non_200": 213
+  },
+  "login": {
+    "trials": 9,
+    "requests": 270
+  }
+}

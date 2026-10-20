@@ -1,0 +1,14 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<p>대상: {{ object_id }}. 원문은 수정하지 않습니다. 신고 처리 시 증거와 설명을 제거합니다.</p>
+{% if error %}<p class="errornote">{{ error }}</p>{% endif %}
+<form method="post">{% csrf_token %}
+{% if report %}
+<button name="action" value="resolved">신고 수용 및 대상 숨김</button>
+<button name="action" value="dismissed">신고 기각</button>
+{% else %}
+<button name="action" value="hide">숨김</button>
+<button name="action" value="restore">복원</button>
+{% endif %}
+</form>
+{% endblock %}

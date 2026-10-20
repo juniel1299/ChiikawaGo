@@ -1,0 +1,45 @@
+name: chii-perf
+services:
+  db:
+    image: postgis/postgis:17-3.5@sha256:01a6a70e41e6c4467c8f55f6063555ed72db2d6662cd0d571040d42eadaeb6f6
+    platform: linux/amd64
+    cpus: 2
+    mem_limit: 2g
+    environment:
+      POSTGRES_DB: chii_perf
+      POSTGRES_USER: perf
+      POSTGRES_PASSWORD: synthetic-perf-only
+    volumes:
+      - perf_db:/var/lib/postgresql/data
+    networks: [isolated]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U perf -d chii_perf']
+      interval: 2s
+      retries: 30
+  api:
+    image: chii-world-api
+    cpus: 2
+    mem_limit: 2g
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.local
+      DJANGO_SECRET_KEY: synthetic-perf-only-not-production
+      JWT_SIGNING_KEY: synthetic-perf-jwt-not-production
+      POSTGRES_DB: chii_perf
+      POSTGRES_USER: perf
+      POSTGRES_PASSWORD: synthetic-perf-only
+      POSTGRES_HOST: db
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+    volumes:
+      - ../../backend:/app
+      - .:/perf
+    ports: ['127.0.0.1:18080:8000']
+    command: [python, manage.py, runserver, '0.0.0.0:8000', --noreload]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [isolated]
+networks:
+  isolated:
+    driver: bridge
+volumes:
+  perf_db:

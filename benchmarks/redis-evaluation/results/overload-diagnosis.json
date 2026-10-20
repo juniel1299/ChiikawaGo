@@ -1,0 +1,27 @@
+{
+  "scope": "Entire dedicated container lifetime; includes warmup and excluded pilots. Counts do not map one-to-one to measured HTTP failures.",
+  "db_shm_bytes": 67108864,
+  "jit_restored": "on",
+  "postgresql": "17.5",
+  "postgis": "3.5.2",
+  "max_connections": 100,
+  "max_parallel_workers_per_gather": 2,
+  "log_pattern_counts": {
+    "api": {
+      "too many clients": 0,
+      "remaining connection slots": 0,
+      "could not resize shared memory segment": 0,
+      "No space left on device": 0,
+      "out of memory": 0,
+      "OperationalError": 396
+    },
+    "db": {
+      "too many clients": 0,
+      "remaining connection slots": 0,
+      "could not resize shared memory segment": 395,
+      "No space left on device": 395,
+      "out of memory": 0,
+      "OperationalError": 0
+    }
+  }
+}

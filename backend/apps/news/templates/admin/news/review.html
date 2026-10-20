@@ -1,0 +1,11 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<p>{{ candidate.title }}</p>
+<p><a href="{{ candidate.raw_item.canonical_url }}" rel="noreferrer">출처 확인</a></p>
+<p>원문 제목·발표일·링크만 비영리 MVP에 발행합니다. 승인 후 자동 수정·재검수하지 않습니다.</p>
+{% if error %}<p class="errornote">{{ error }}</p>{% endif %}
+<form method="post">{% csrf_token %}
+<button type="submit" name="action" value="approve">승인 즉시 발행</button>
+<button type="submit" name="action" value="reject">반려</button>
+</form>
+{% endblock %}
