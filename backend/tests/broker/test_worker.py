@@ -100,6 +100,11 @@ def worker(tmp_path):
                 ignore_result=True,
             ).id
 
+        def send_push(self, delivery, attempt=1):
+            return sender.send_task(
+                "notifications.deliver", args=[str(delivery.pk), attempt], queue=queue
+            ).id
+
         def recover(self, user):
             BatchExecution.objects.filter(pk=self.execution.pk).update(
                 attempt_started_at=timezone.now() - timedelta(seconds=781)

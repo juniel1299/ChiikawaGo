@@ -14,6 +14,8 @@ services:
   api:
     image: chii-world-api
     environment:
+      # Local Docker ARM VM compatibility; not a production crypto setting.
+      OPENSSL_armcap: "${OPENSSL_ARM_CAP_OVERRIDE:-0}"
       DJANGO_SETTINGS_MODULE: config.settings.local
       DJANGO_SECRET_KEY: isolated-mobile-test-only
       JWT_SIGNING_KEY: isolated-mobile-test-jwt-only

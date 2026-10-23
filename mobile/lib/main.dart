@@ -9,6 +9,8 @@ import 'core/session.dart';
 import 'core/location.dart';
 import 'features/flows.dart';
 import 'features/signup_screen.dart';
+import 'features/notifications/controller.dart';
+import 'features/notifications/firebase_platform.dart';
 
 const apiUrl = String.fromEnvironment(
   'API_BASE_URL',
@@ -19,6 +21,18 @@ final sessionProvider = Provider<Session>((ref) {
   final session = Session(Api(apiUrl), const SecureRefreshStore());
   ref.onDispose(session.dispose);
   return session;
+});
+final pushReadyProvider = Provider<bool>((ref) => false);
+final pushProvider = Provider<PushController?>((ref) {
+  if (!ref.watch(pushReadyProvider)) return null;
+  final controller = PushController(
+    ref.watch(sessionProvider),
+    FirebasePushPlatform(),
+    SecureInstallationStore(),
+    defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android',
+  );
+  ref.onDispose(controller.dispose);
+  return controller;
 });
 final locationProvider = Provider<LocationSource>((ref) => DeviceLocation());
 
@@ -63,7 +77,7 @@ class AuthController extends Notifier<AuthView> {
   }
 }
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (kReleaseMode && Uri.parse(apiUrl).scheme != 'https') {
     runApp(
@@ -73,7 +87,13 @@ void main() {
     );
     return;
   }
-  runApp(const ProviderScope(child: ChiiApp()));
+  final ready = await initializePush();
+  runApp(
+    ProviderScope(
+      overrides: [pushReadyProvider.overrideWithValue(ready)],
+      child: const ChiiApp(),
+    ),
+  );
 }
 
 class ChiiApp extends ConsumerStatefulWidget {
@@ -93,6 +113,7 @@ class _ChiiAppState extends ConsumerState<ChiiApp> {
   Widget build(BuildContext context) {
     final session = ref.watch(sessionProvider);
     final auth = ref.watch(authViewProvider);
+    final push = ref.watch(pushProvider);
     return MaterialApp(
       title: 'CHII WORLD',
       theme: ThemeData(
@@ -103,6 +124,7 @@ class _ChiiAppState extends ConsumerState<ChiiApp> {
           ? Home(
               key: ValueKey('${session.generation}:${session.user!['id']}'),
               session: session,
+              push: push,
               mapReady: ref.watch(mapAvailabilityProvider).value ?? false,
               location: ref.read(locationProvider),
             )
@@ -209,10 +231,12 @@ class Home extends StatefulWidget {
     required this.session,
     required this.location,
     this.mapReady = false,
+    this.push,
   });
   final Session session;
   final LocationSource location;
   final bool mapReady;
+  final PushController? push;
   @override
   State<Home> createState() => _HomeState();
 }
@@ -226,15 +250,39 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    widget.push?.addListener(pushChanged);
   }
 
   @override
   void dispose() {
+    widget.push?.removeListener(pushChanged);
     WidgetsBinding.instance.removeObserver(this);
     nearby.dispose();
     encounters.dispose();
     collection.dispose();
     super.dispose();
+  }
+
+  int lastHomeEvent = 0;
+  String? lastPushNotice;
+  void pushChanged() {
+    if (!mounted) return;
+    final notice = widget.push?.notice;
+    if (notice != null && notice != lastPushNotice) {
+      lastPushNotice = notice;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(notice)));
+        }
+      });
+    }
+    setState(() {
+      if ((widget.push?.homeEvent ?? 0) != lastHomeEvent) {
+        lastHomeEvent = widget.push?.homeEvent ?? 0;
+        tab = 0;
+      }
+    });
   }
 
   @override
@@ -247,6 +295,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       }
     }
     if (state == AppLifecycleState.resumed) {
+      widget.push?.synchronize();
       if (widget.location is DeviceLocation) {
         (widget.location as DeviceLocation).setForeground(true);
       }
@@ -282,12 +331,32 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       appBar: AppBar(
         title: const Text('CHII WORLD'),
         actions: [
+          if (widget.push != null)
+            PopupMenuButton<String>(
+              tooltip: '알림 설정',
+              enabled: !widget.push!.busy && !widget.push!.closing,
+              onSelected: (value) => widget.push!.synchronize(
+                optIn: value == 'on',
+                disable: value == 'off',
+              ),
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'on', child: Text('알림 켜기 / 등록 갱신')),
+                const PopupMenuItem(value: 'off', child: Text('알림 끄기')),
+                if (widget.push!.notice != null)
+                  PopupMenuItem(
+                    enabled: false,
+                    child: Text(widget.push!.notice!),
+                  ),
+              ],
+              icon: const Icon(Icons.notifications_outlined),
+            ),
           IconButton(
             tooltip: '로그아웃',
             onPressed: () async {
               final messenger = ScaffoldMessenger.of(context);
               try {
-                final revoked = await widget.session.logout();
+                final revoked =
+                    await (widget.push?.logout() ?? widget.session.logout());
                 if (!revoked) {
                   messenger.showSnackBar(
                     const SnackBar(

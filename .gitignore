@@ -51,3 +51,13 @@ mobile/ios/build/
 # macOS
 .DS_Store
 PROMPT.md
+
+# Firebase and APNs local credentials/configuration
+**/GoogleService-Info.plist
+**/google-services.json
+**/firebase-options.local.json
+**/service-account*.json
+*.p8
+*.p12
+
+compose.push.local.yaml

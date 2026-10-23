@@ -232,3 +232,115 @@ registration/regression acceptance remains pending. No commit/push performed.
 ## Final acceptance — 2026-10-21
 
 **Phase 12/12.5 MVP: COMPLETE.** The user confirmed physical iPhone signup, email-prefilled Login, login, restart/session restore, logout and Nearby/Encounter/Capture/Collection regression. Combined with the recorded automated checks, this closes the MVP acceptance. Physical evidence is user-reported. Android physical validation remains UNVERIFIED; this is not a production-release readiness claim. Earlier pending entries are historical and superseded by this acceptance.
+
+## Phase 13 — Firebase/APNs setup and acceptance
+
+Push defaults OFF. Existing Django JWT/secure refresh storage are unchanged. Explicit
+notification opt-in is available after login; denied permission leaves the device disabled.
+Resume checks current permission. Installation UUID/secret/version/opt-in are stored in
+secure storage, separately from refresh credentials, and survive logout. If unregistration
+cannot reach the server, logout still clears authentication; an in-flight fixed test alert
+may arrive. No token, secret, request body or precise location is logged by application code.
+
+### User-owned setup (never paste private key content into chat)
+
+1. Create/select a Firebase project. Register iOS bundle `dev.chiiworld.mobile` and
+   Android application ID from `android/app/build.gradle.kts`; use separate development
+   and production Firebase projects/configuration. Enable the Cloud Messaging API.
+2. Apple Developer portal: enable Push Notifications on that explicit App ID, create
+   an APNs authentication key, and upload the `.p8` with Key ID and Team ID in Firebase
+   Project Settings → Cloud Messaging → the iOS app. Regenerate signing provisioning
+   with push entitlement. This requires the user's Apple Developer permissions.
+3. Download native Firebase config files from that project's app settings. Android:
+   `mobile/android/app/src/debug/google-services.json` (release under `src/release/`).
+   The pinned Google Services 4.5.0 build plugin generates the native resources when
+   a local config exists. iOS: `mobile/ios/Runner/Firebase/Debug/GoogleService-Info.plist`
+   (separate `Release/` and `Profile/` files for those builds). The build copies only the
+   selected configuration into the app bundle and removes stale bundled config if absent.
+   All these files are ignored. Do not add them to Git or publish their contents in chat.
+   Run the pinned wrapper with `--dart-define=PUSH_ENABLED=true` and existing local
+   API/Maps options. Firebase.initializeApp reads native resources; configuration must
+   exist for the chosen platform/build. No config is required for default Push-OFF CI.
+   Client API keys are shipped in the app, not server credentials; apply appropriate
+   API restrictions. [Official Android setup](https://firebase.google.com/docs/android/google-services-plugin-and-file).
+4. Server Worker: use ADC with a dedicated principal authorized to send FCM for that
+   project (Firebase Cloud Messaging API Admin role, not project Owner). Prefer managed
+   credentials in deployment; for local testing mount an externally stored service
+   account JSON **read-only** and set GOOGLE_APPLICATION_CREDENTIALS to that container
+   path. Do not put JSON contents in .env, Docker image, repository or broker.
+5. Set server PUSH_ENABLED=true and FIREBASE_PROJECT_ID to the same project. Mount ADC
+   on Worker only in an ignored local Compose override. Start API/Worker/RabbitMQ and
+   `docker compose --profile push up -d push-reconciler`. Apply migrations explicitly.
+   The reconciler publishes IDs only and needs no Firebase credentials.
+6. iOS Debug uses development APNs entitlement; Release uses production. APNs key and
+   provisioning must match the actual build/project. Do not use a simulator build as
+   proof of physical APNs reception. Android notification permission (13+) and the
+   operator_test channel are configured; physical Android remains UNVERIFIED.
+
+Apple Silicon Docker note: importing cryptography 50.0.2 raised SIGILL in this local VM.
+`OPENSSL_armcap=0` allowed the same binary to load; the development and isolated-test Compose environments set this workaround explicitly
+(default 0, overridable by OPENSSL_ARM_CAP_OVERRIDE). Validation records this variable.
+The Django settings and image do not set it; do not copy this local CPU override to production. See the upstream [Apple Silicon report](https://github.com/pyca/cryptography/issues/14764)
+and [OpenSSL capability documentation](https://docs.openssl.org/master/man3/OPENSSL_armcap/).
+
+### Physical acceptance still required
+
+With a configured signed iPhone build: login, opt in, confirm Admin shows an enabled
+binding (no identifier displayed), grant staff `view_pushmessage` and
+`send_operator_test` permissions, send from Admin's explicit test form. Confirm foreground
+in-app notice, background system notification/tap HOME, and terminated launch/tap HOME.
+Verify denied permission, app resume, logout/account switch, duplicate tap, and existing
+signup/login/GPS/Nearby/Encounter/Capture/Collection. Record SENT only as provider accepted;
+record actual iPhone display separately. Do not manually reset UNKNOWN—send a new Message
+if an operator decides another test is needed. No actual delivery is claimed without this.
+
+2026-10-23 automated validation: 63 Flutter unit/widget tests, separate real Django/PostGIS
+HTTP flows 2/2, analyzer/format, Android debug and iOS Simulator builds passed. Backend
+368 and broker 19 passed. New native config packaging compiles without credentials;
+actual configured Firebase initialization, APNs signing/display and real token rotation
+remain UNVERIFIED. The user explicitly selected setup guidance and deferred physical
+Push verification. Earlier Phase 12 physical acceptance does not establish Phase 13 Push
+acceptance. Existing dependency migration warnings (Firebase Kotlin plugin / Maps iOS
+SPM support) remain warnings. No commit/push performed.
+
+Local Worker credential override example (save as ignored `compose.push.local.yaml` at
+repository root; the actual ADC file must be outside the repository):
+
+```yaml
+services:
+  worker:
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase-adc.json
+    volumes:
+      - ${FIREBASE_ADC_FILE:?Set an external credential file path}:/run/secrets/firebase-adc.json:ro
+```
+
+Set FIREBASE_ADC_FILE privately in your shell and PUSH_ENABLED/FIREBASE_PROJECT_ID in
+local `.env`, then run `docker compose -f compose.yaml -f compose.push.local.yaml --profile push up -d worker push-reconciler`.
+Never run `docker compose config` into a shared report containing resolved local settings.
+Grant the operator active staff status, view permissions for notification models and
+`notifications.send_operator_test`; staff alone cannot send. Open Django Admin → Push
+messages → new test send, select the signed-in test account, and submit once. The form's
+idempotency key prevents duplicate creation on a repeated submission.
+
+
+## 2026-10-24 Phase 13 checkpoint — physical validation deferred
+
+**IMPLEMENTATION COMPLETE / PHYSICAL PUSH VALIDATION DEFERRED**.
+
+The user accepted implementation and automated validation, and explicitly deferred Apple
+Developer Program paid membership until deployment/TestFlight. This supersedes the
+earlier pending-setup status; it is not physical-delivery acceptance.
+
+Completed: PushDevice/PushMessage/PushDelivery; installation proof + server binding_version
+(no registration_sequence); stale PUT/DELETE protection; fixed operator test send;
+Celery/RabbitMQ delivery/retry/UNKNOWN/SKIPPED/reconciliation; Firebase provider adapter;
+Flutter permission/registration lifecycle and HOME routing. Recorded Backend, actual
+broker/Worker, Flutter, Django/PostGIS integration, Android debug and iOS Simulator
+checks remain the automated evidence.
+
+Unverified/deferred: actual FCM → APNs → iPhone delivery, physical foreground/background/
+terminated reception, physical APNs/token rotation, and Android physical validation.
+No success is inferred. Firebase/APNs credentials and actual provider dispatch remain off.
+Revisit these checks with membership/signing at deployment/TestFlight; Phase 14 cloud
+development planning can proceed independently.

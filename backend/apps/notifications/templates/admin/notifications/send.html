@@ -1,0 +1,6 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<p>CHII WORLD 테스트 알림 — 알림 연결을 확인합니다. 앱을 열어 주세요. (HOME)</p>
+<p>SENT는 provider 접수입니다. UNKNOWN을 다시 테스트하면 중복 알림이 도착할 수 있습니다.</p>
+<form method="post">{% csrf_token %}{{ form.as_p }}<button type="submit">선택한 사용자에게 테스트 발송</button></form>
+{% endblock %}

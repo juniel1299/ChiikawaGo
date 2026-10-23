@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>FirebaseMessagingAutoInitEnabled</key><false/>
+	<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key><false/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>주변 Spot을 찾고 발견 가능 거리를 확인하기 위해 앱 사용 중 위치를 사용합니다.</string>
 	<key>GMSApiKey</key>

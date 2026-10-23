@@ -174,3 +174,24 @@ GET /api/v1/news, GET /api/v1/news/{id}: 인증 없이 발행된 News만 조회�
 | /executions/{id}/confirm-failure | POST: worker_stopped=true 명시 확인, stale만 200 |
 
 Run Now/Retry에는 UUID `Idempotency-Key`와 빈 JSON 객체를 사용한다. 같은 actor/job/key로 다른 동작을 요청하면 409. 다른 키로 미완료 Job을 요청해도 409(job_busy). 202는 DB 원장 접수이며 broker 전송/수집 성공이 아니다. 네트워크 응답 유실 후 클라이언트는 같은 키를 유지한다. 일반 공개 API와 수집/검수 정책은 변하지 않는다.
+
+## Phase 13 — installation registration
+
+Authenticated endpoints (no trailing slash):
+
+- PUT `/api/v1/notifications/devices/{installation_id}`: installation_secret,
+  binding_version (0 for first registration), platform (`ios`/`android`), enabled,
+  permission_state (`not_determined`/`denied`/`authorized`/`provisional`), provider_token.
+  Enabled requires authorized/provisional permission and a nonempty provider identifier.
+  Initial response 201; update 200.
+- POST `/api/v1/notifications/devices/{installation_id}/resolve`: installation_secret.
+  Returns current version for recovery; 200, unknown installation 404, wrong proof 403.
+- DELETE same device path: installation_secret + current binding_version. 204, old
+  version 409, wrong owner/proof 403, unknown device 404. Keep the local installation
+  credentials across logout; delete deactivates rather than removing the ownership row.
+
+Successful PUT/resolve response has exactly installation_id, binding_version, enabled.
+Unknown request fields are rejected. No secret/provider identifier/owner is returned.
+Broker payload is Delivery UUID + attempt number only. Registration, resolve and delete
+use the existing JWT and error envelope. Device state recovery is not an unauthenticated
+lookup and is not an automatic replay by an old Flutter session.

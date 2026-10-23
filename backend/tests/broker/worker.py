@@ -111,6 +111,20 @@ if mode == "completion_lost":
 
     services.finish_attempt = fail_completion
 
+if mode.startswith("push_"):
+    from apps.notifications import provider
+
+    def fake_push(**kwargs):
+        with (control / "push_calls").open("a") as log:
+            log.write("call\n")
+        if mode == "push_lost":
+            os._exit(17)
+        if mode == "push_transient":
+            return provider.Outcome(code="provider_transient", retryable=True)
+        return provider.Outcome(message_id="synthetic-accepted")
+
+    provider.send = fake_push
+
 app.conf.update(
     CELERY_TASK_QUEUES=[Queue(queue, exchange=queue, routing_key=queue, durable=True)],
     CELERY_TASK_DEFAULT_QUEUE=queue,

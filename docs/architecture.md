@@ -131,3 +131,27 @@ Batch 잠금은 PostgreSQL, Celery broker는 RabbitMQ, 실행 상태는 BatchExe
 Flutter Android/iOS가 기존 Django API에 Bearer JWT로 직접 연결한다. Next.js 쿠키/BFF를 경유하지 않는다. Riverpod가 의존성 수명과 인증 상태를 관리하며 기능 controller는 사용자 세션에 종속한다. 토큰 저장·위치·HTTP만 테스트 대체 경계로 둔다. Refresh Token은 플랫폼 secure storage, Access Token은 메모리에 유지한다. API 계약·Modular Monolith·DB 트랜잭션은 그대로다.
 
 Google Maps는 플랫폼별 제한된 API key를 로컬/배포 설정에서 주입하며 Git에 저장하지 않는다. Foreground 단발 GPS와 명시적 Nearby 갱신만 사용하고 사용자 정밀 좌표는 로그·영구 저장소에 기록하지 않는다. 지도와 GPS를 대체하는 자동 테스트와 실제 기기 검증은 별도 완료 항목이다. MapLibre/flutter_map 전환은 Future Consideration이다.
+
+## Phase 13 notification delivery
+
+The existing PostgreSQL and RabbitMQ remain authoritative storage and transport.
+`notifications.deliver` uses a dedicated durable queue on the existing Worker. Commit
+callbacks attempt publication; the optional `push-reconciler` process recovers pending
+publication and due retries every five seconds. It is separate from Batch scheduling.
+No network request is enclosed in a database transaction. Duplicate messages claim the
+same attempt once. Dispatch leases can yield duplicate transport messages, not automatic
+re-execution of SENDING/UNKNOWN records.
+
+Firebase Admin 7.7.0, firebase_core 5.0.0 and firebase_messaging 17.0.0 are locked. These
+SDKs use FID registration (`register`/`onRegistered`, Admin `Message(fid=...)`). The app's
+installation_id is a separate ownership identifier. The private provider_token field
+holds the provider registration identifier; it must never become public API metadata.
+The pinned Admin transport's implicit retries are disabled in the provider adapter;
+only recorded transient outcomes schedule up to two retries. Configuration/payload/TLS
+failures are terminal; unknown Worker outcomes are not retried. SDK upgrades must recheck
+this narrow private transport hook and provider tests.
+
+Default PUSH_ENABLED is false. Missing Firebase configuration must not break existing
+login/GPS/collection. Mobile foreground alerts use in-app feedback; background/terminated
+visible notification taps accept only the versioned OPERATOR_TEST/HOME payload. A tap
+while logged out waits for login. No silent/background location processing is introduced.

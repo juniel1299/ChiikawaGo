@@ -6,6 +6,14 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Native resources are required for FCM delivery before the Dart process starts.
+// Configuration files remain local and ignored; credential-free builds keep Push off.
+if (file("google-services.json").exists() ||
+    file("src/debug/google-services.json").exists() ||
+    file("src/release/google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 val mapsLocal = Properties().apply {
     val file = rootProject.file("maps.local.properties")
     if (file.exists()) file.inputStream().use { load(it) }

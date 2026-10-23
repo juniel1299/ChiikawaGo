@@ -318,3 +318,85 @@ Phase 11 최종 승인: **C — Redis adoption deferred after measurement**. Nea
 ### 2026-10-21 Phase 12 최종 판정 — COMPLETE
 
 사용자가 실제 iPhone에서 신규 Sign Up → 이메일이 채워진 Login → Login → 앱 종료/재실행 Session restore → Logout과 Nearby → Encounter → Capture → Collection 회귀 성공을 확인했다. 자동 검증 54개(Unit 48/Widget 6), 격리 Django/PostGIS 통합 2개, analyzer/format, Android debug 및 iOS Simulator build 통과 결과와 함께 Phase 12/12.5 MVP를 COMPLETE로 판정한다. 실기기 근거는 사용자 확인이며 Android 실기기는 계속 UNVERIFIED다. Android 실기기 검증 및 배포 준비 완료를 의미하지 않는다. Phase 13은 별도 계획 승인 후 구현한다.
+
+## Phase 13 — implementation / automatic validation (2026-10-23)
+
+Status: **IMPLEMENTED / AUTOMATED CHECKS PASSED / PHYSICAL PUSH VALIDATION PENDING**.
+The user selected Firebase/APNs setup guidance with physical validation deferred because
+no project/APNs/server credentials are ready. Phase 13 is **not COMPLETE** until actual
+signed iPhone FCM → APNs display/tap acceptance is recorded. Android physical remains
+UNVERIFIED. No commit/push or remote CI was performed.
+
+Implemented: notifications app/migration, ownership-proof bootstrap and server-managed
+binding_version CAS (no registration_sequence), secret-protected resolve, operator-only
+fixed test send, durable Delivery state, Celery/RabbitMQ delivery and dedicated recovery.
+SENT means provider accepted. UNKNOWN is never automatically retried; a new operator
+Message is required for another test. No BatchExecution integration or business triggers.
+Mobile adds explicit permission/opt-in, secure installation proof, serialized registration,
+generation fencing, logout cleanup, and HOME-only foreground/background/launch tap routing.
+Native Firebase configuration is environment-specific and ignored; default Push-OFF CI
+requires no external Firebase/GPS/maps server. Existing authentication and MVP contracts
+are unchanged.
+
+Validation recorded in this worktree:
+
+- Backend full suite: **368 passed**, **19 intentionally skipped broker tests**.
+- Separate real RabbitMQ/prefork Worker suite: **19 passed**, including duplicate Push,
+  bounded transient retries and child-process loss → UNKNOWN without re-send. Provider
+  responses are test fixtures, not actual Firebase acceptance.
+- New notifications tests: **26** within the Backend total: CAS overlap observed with
+  PostgreSQL locks, ownership, safe invalidation, rollback, DB constraints, Admin CSRF,
+  actual response/OpenAPI contract, provider classification and migration upgrade
+  preserving existing News/Capture/Collection data.
+- Flutter: **63 passed** (56 unit, 7 widget); two HTTP tests intentionally skipped in
+  ordinary suite and **both passed separately** against isolated Django/PostGIS.
+  Existing signup/login/me/restore/logout and Nearby/Encounter/Capture/Collection passed.
+- Ruff check/format, Django check, OpenAPI validation, migration drift and git diff check
+  passed. Dart analyzer/format passed. Android debug APK and iOS Simulator debug build
+  passed after native configuration support. Builds without real Firebase configuration
+  do not validate actual APNs registration/signing or FCM delivery.
+- Apple Silicon local Docker cryptography import initially failed with SIGILL; explicit
+  `OPENSSL_armcap=0` in local development/test Compose restored import and HTTP auth tests.
+  This is an environment compatibility workaround, not a production setting or new
+  authentication policy. No existing dependency versions changed; Firebase dependencies
+  and native lockfiles are additions. Existing upstream Kotlin/SPM migration warnings
+  remain, without build failure.
+- Changed-file scans found no private key/JWT/API-key values, private absolute paths,
+  tracked Pods/build outputs or >1 MiB artifacts. This is a pattern scan, not a guarantee
+  about external SDK/native runtime logging. Test logs remain outside Git. Isolated DBs,
+  test queues/Workers and orphan test messages were cleaned up.
+
+User setup and exact physical acceptance steps are in `mobile/README.md` Phase 13.
+Required: Firebase app registration, APNs key/team configuration and signing, native
+platform config files, and a least-privilege server ADC identity. Never paste private key
+contents into chat. After setup, verify foreground, background and terminated tap HOME,
+permission refusal, account switching/logout and the existing mobile MVP on iPhone.
+
+Final bootstrap race check: an additional PostgreSQL overlap test confirmed that two
+version-0 creates cannot upsert/take over the same installation: one creates version 1,
+the other gets 409, and the first owner remains. The concurrency module passed 3/3.
+This adds one test after the recorded 368-test full run (27 notification tests now);
+it is reported separately rather than relabeling the earlier full-suite run. No service
+code changed after that full run. Final analyzer/format/Ruff/diff checks passed.
+
+
+## 2026-10-24 Phase 13 checkpoint — physical validation deferred
+
+**IMPLEMENTATION COMPLETE / PHYSICAL PUSH VALIDATION DEFERRED**.
+
+The user accepted implementation and automated validation, and explicitly deferred Apple
+Developer Program paid membership until deployment/TestFlight. This supersedes the
+earlier pending-setup status; it is not physical-delivery acceptance.
+
+Completed: PushDevice/PushMessage/PushDelivery; installation proof + server binding_version
+(no registration_sequence); stale PUT/DELETE protection; fixed operator test send;
+Celery/RabbitMQ delivery/retry/UNKNOWN/SKIPPED/reconciliation; Firebase provider adapter;
+Flutter permission/registration lifecycle and HOME routing. Recorded Backend, actual
+broker/Worker, Flutter, Django/PostGIS integration, Android debug and iOS Simulator
+checks remain the automated evidence.
+
+Unverified/deferred: actual FCM → APNs → iPhone delivery, physical foreground/background/
+terminated reception, physical APNs/token rotation, and Android physical validation.
+No success is inferred. Firebase/APNs credentials and actual provider dispatch remain off.
+Revisit these checks with membership/signing at deployment/TestFlight; Phase 14 cloud
+development planning can proceed independently.

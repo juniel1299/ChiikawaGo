@@ -114,3 +114,23 @@ NewsCandidate는 RawItem OneToOne과 title/category/summary/status/reviewed_by/r
 - 자동 retry는 같은 원장에서 최대 세 시도, 운영자 Retry는 새 행이며 실패한 원본당 후속 하나다. 동기 실행은 task ID가 없고 scheduler 재발행 대상에서 제외된다.
 
 next_dispatch_at은 짧은 잠금으로 발행 선점과 유실 복구를 지원한다. publisher confirm 후 Worker 시작이 없으면 120초 뒤 재확인하고 발행 실패는 30초 뒤 재시도한다. commit/publish 원자성이나 exactly-once 부작용을 보장하지 않는다. stale은 현재 시도 시작+hard limit+120초로 계산하며 저장 상태를 자동 변경하지 않는다.
+
+## Phase 13 — PushDevice / PushMessage / PushDelivery
+
+PushDevice has unique installation_id, secret_hash (never raw secret), owner, platform,
+private provider_token/token_hash, permission, enabled and positive binding_version.
+Enabled provider identifiers are unique. Disable clears the identifier and increments
+version. Invalid/unregistered responses disable only the same binding and identifier;
+a late provider error must not disable a newer registration.
+
+PushMessage stores fixed OPERATOR_TEST/HOME text, target user, operator and idempotency
+key. (operator, key) is unique. PushDelivery is unique per (message, device), snapshots
+binding_version, and stores at most three attempts, safe codes and dispatch timestamps.
+The provider identifier is read from the current protected device, never copied into
+broker messages, Admin or API responses. All relations preserve history with PROTECT.
+
+PENDING → SENDING → SENT / FAILED / RETRY_WAIT. Binding changes become SKIPPED.
+SENT means provider accepted, not displayed/read. Before external I/O a durable boundary
+marker is set. SENDING older than 240 seconds becomes UNKNOWN if that marker exists,
+otherwise FAILED. UNKNOWN is uncertain, not proven delivery; it is never auto-retried.
+Operator confirmation may lead to a **new** test Message, never reopening that Delivery.

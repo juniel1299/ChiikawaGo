@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     "apps.community",
     "apps.news",
     "apps.batch",
+    "apps.notifications",
 ]
 MIDDLEWARE = [
     "config.middleware.RequestLogMiddleware",
@@ -181,3 +182,13 @@ LOGGING["loggers"]["chii.tasks"] = {
 # RabbitMQ 4.3 rejects non-durable, non-exclusive control/event queues.
 CELERY_CONTROL_QUEUE_EXCLUSIVE = True
 CELERY_EVENT_QUEUE_EXCLUSIVE = True
+
+PUSH_ENABLED = os.environ.get("PUSH_ENABLED", "false").lower() == "true"
+FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "")
+CELERY_TASK_QUEUES["notifications.deliver"] = {
+    "exchange": "notifications.deliver",
+    "routing_key": "notifications.deliver",
+    "durable": True,
+    "queue_arguments": {"x-queue-type": "classic"},
+}
+CELERY_TASK_ROUTES["notifications.deliver"] = {"queue": "notifications.deliver"}

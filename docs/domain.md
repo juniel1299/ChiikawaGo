@@ -87,3 +87,26 @@ batch는 허용된 Job 정의, DB Cron, 접수/시도/최종 결과 원장과 �
 변경 잠금 순서는 Job → Schedule(필요 시) → Execution이다. Job별 queued/running/retry_wait는 하나이며 unique constraint와 행 잠금을 함께 사용한다. 서비스/HTTP/메시지 발행은 원장 트랜잭션 밖에서 수행한다. Source를 바꾸는 것은 미완료 Execution이 없을 때만 가능하다. 비활성화는 신규 접수를 막고 기존 접수는 취소하지 않는다.
 
 Celery 전달은 중복될 수 있다. Worker는 Execution의 상태와 예상 시도 번호를 잠금 후 확인하고 한 번만 시작한다. RUNNING 메시지 재전달은 재실행하지 않는다. 장기 RUNNING은 자동 실패가 아니라 불확실 상태이며 운영자가 기존 실행 종료를 확인한 뒤 실패 확정·새 Retry를 수행한다. 최종 상태는 늦은 Worker 완료로 덮어쓰지 않는다.
+
+## Phase 13 — notifications
+
+Notifications owns installation binding, operator test messages and delivery outcomes.
+Only OPERATOR_TEST / HOME is supported; fixed text contains no account or location data.
+Django JWT remains authentication. Firebase is delivery infrastructure, not FirebaseAuth.
+No Community/News trigger, broadcast, BatchExecution integration or Redis is introduced.
+
+A client generates and securely persists UUID + 256-bit random secret **before** bootstrap.
+The server stores only SHA-256(secret); this high-entropy proof is not a user password.
+Initial PUT uses binding_version=0 and creates version 1. Every accepted PUT/DELETE locks
+only the device row, checks proof/version, then increments the server version. There is
+no registration_sequence. A valid proof permits account transfer with the new JWT.
+Old versions fail with 409; DELETE additionally requires current ownership.
+Resolve returns version/enabled/installation_id only to an authenticated proof holder.
+It recovers lost-response state, never reveals owner or provider identifier. Flutter
+serializes local writes and fences late responses by session generation; old generations
+must not resolve and replay. Reinstall/Keychain loss is not inferred as proof of ownership.
+
+Lock order is operator User (test submission only) → PushDevice → PushDelivery; joined
+User/Message rows are not implicitly locked. Network calls never hold these locks.
+A binding change skips queued old deliveries. A request already crossing the provider
+boundary cannot be recalled; fixed non-sensitive notification content limits exposure.

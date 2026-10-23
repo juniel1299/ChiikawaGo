@@ -8,6 +8,11 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        if (android.os.Build.VERSION.SDK_INT >= 26) {
+            getSystemService(android.app.NotificationManager::class.java).createNotificationChannel(
+                android.app.NotificationChannel("operator_test", "운영자 테스트", android.app.NotificationManager.IMPORTANCE_DEFAULT)
+            )
+        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "chii/config")
             .setMethodCallHandler { call, result ->
                 if (call.method == "mapsReady") {

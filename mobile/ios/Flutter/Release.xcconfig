@@ -2,3 +2,5 @@
 #include "Generated.xcconfig"
 
 #include? "Maps.Release.local.xcconfig"
+
+APS_ENVIRONMENT = production
